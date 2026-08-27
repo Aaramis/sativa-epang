@@ -71,14 +71,47 @@ few hundred queries spends about a fifth of its time on setup.
 | `SATIVA_EPANG_FOLD_JOBS` | up to 4 | Folds placed at once, sharing the thread budget. |
 | `SATIVA_EPANG_EMIT_JOBS` | 4 | Fold directories written at once. Each fold writes its own copy of the reference alignment, which on a network filesystem is latency rather than throughput. |
 | `SATIVA_EPANG_SORT` | 1 | Sorts the placements before SATIVA classifies them. This is what makes a run reproducible, and what makes the staged run agree with the one-shot run whatever order the folds come back in. |
+| `SATIVA_EPANG_MODEL` | from `RAxML_info` | Model for the leave-one-out. Needed with `-r`, where there is no `RAxML_info` to find. |
+| `SATIVA_EPANG_FAST_MAP` | 1 | 0 uses the ete3 bipartition map instead of the linear one. |
+| `SATIVA_EPANG_FAST_PRUNE` | 1 | 0 uses ete3's `prune()` instead of the array pass. |
+| `SATIVA_EPANG_MAP_CHECK` | unset | Builds both edge maps and logs where they differ. See the note below. |
+| `SATIVA_EPANG_FOLD_ORDER` | `name` | `tree` deals the leaves round robin in tree order, so that neighbours land in different folds. |
+| `SATIVA_EPANG_DYN_HEUR` | EPA-ng default | `--dyn-heur`. |
+| `SATIVA_EPANG_FIX_HEUR` | unset | `--fix-heur`, the same kind of shortcut SATIVA asks RAxML for above 1000 taxa. |
+| `SATIVA_EPANG_PRECISION` | 10 | `--precision`, decimals in the jplace. |
 
-## Checksums of the changed files (benchmark copy)
+Two further approximations of the leave-one-out are implemented, off, and not recommended.
+They exist because `09_optimisations.sh` in the benchmark measures them, and what they cost
+is in `OPTIMISATIONS.md`.
 
-```
-539cc3fdc30f2215f2e267412e076cde  sativa.py
-5e403bd9009929e90c38a8b3c28451bb  epac/epang_l1o.py
-79d6c16ab7107082d637e51213459cba  epac/config.py
-```
+| Variable | Default | Effect |
+|---|---|---|
+| `SATIVA_EPANG_SELF_PLACE` | 0 | Places every sequence once on the whole tree and masks its own branches afterwards, instead of running K folds. |
+| `SATIVA_EPANG_SELF_MASK` | `neighbour` | `pendant` masks only the query's own branch. |
+| `SATIVA_EPANG_SELF_MAX` | 200 | Placements kept per query before masking. |
+| `SATIVA_EPANG_SELF_HEUR` | `fix:0.02` | EPA-ng heuristic for that single run. |
+| `SATIVA_EPANG_SCREEN` | unset | Keeps the exact leave-one-out but only for sequences a cheap first pass finds suspicious, turning K runs into two. |
+| `SATIVA_EPANG_SCREEN_HEIGHT` | 3 | How many ancestors up the neighbourhood reaches. |
+| `SATIVA_EPANG_SCREEN_MASK` | `neighbour` | As `SELF_MASK`, for the screening pass. |
+| `SATIVA_EPANG_SCREEN_RULE` | `top` | How the first pass decides a sequence is suspicious. |
+| `SATIVA_EPANG_SCREEN_FOLD_FRAC` | 0.04 | Fold size for the exact second pass. |
+
+## The two edge maps do not agree everywhere
+
+`SATIVA_EPANG_MAP_CHECK=1` builds the linear map and the ete3 one side by side. They agree
+on almost every edge, and where they differ the linear map has one edge more: 2 folds out of
+25 at 400 sequences, 1 out of 25 at 1600, one edge each time.
+
+The cause is a bipartition that splits the pruned tree exactly in half. Both maps key a
+bipartition by one canonical side, but the ete3 version picks it by set size, and at a
+192-192 split that rule does not pick the same side for the table entry as for the lookup,
+so the lookup misses an edge whose complement is sitting in the table. The linear map keys
+on `min(hash, all ^ hash)`, which is complement-invariant, and finds it.
+
+So the linear map is the more correct of the two, and the ete3 one is kept only as the
+reference to check it against. The `.mis` file is the same either way on everything measured
+here: a dropped edge loses its likelihood weight, and one edge out of 765 did not move a
+confidence far enough to change a call.
 
 ## Building RAxML
 

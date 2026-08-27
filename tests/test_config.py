@@ -70,6 +70,10 @@ class ConfigTests(unittest.TestCase):
         self.assertTrue(os.path.isdir(cfg.temp_dir))
         cfg.clean_tempdir()
         self.assertFalse(os.path.isdir(cfg.temp_dir))
+        # sativa.cfg pins raxml_model on this branch (GTRGAMMA, see CHANGES-epa-ng.md), so
+        # the auto resolution below is checked from the defaults rather than from the
+        # shipped config file.
+        cfg.set_defaults()
         self.assertTrue(cfg.raxml_model.lower() == "auto")
         self.assertTrue(cfg.epa_use_heuristic.lower() == "auto")
         cfg.resolve_auto_settings(10)

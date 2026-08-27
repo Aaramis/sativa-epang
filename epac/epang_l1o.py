@@ -10,7 +10,7 @@ alignment and the fold's sequences are placed with EPA-ng; the EPA-ng edges are
 remapped to B= by leaf bipartition. All placements are kept
 (--filter-acc-lwr 0.99999 --filter-max 100000) to recover the full LWR mass.
 """
-import os, sys, re, json, glob, subprocess, shutil, time
+import os, sys, re, json, glob, random, subprocess, shutil, time
 sys.setrecursionlimit(200000)
 from ete3 import Tree
 
@@ -45,7 +45,6 @@ def _bip_map(nhx_tree_str, tag):
 # The de-duplication order is reproduced as it stands: inside one tree the later node wins
 # (dict overwrite in level order, the order ete3's traverse() uses), and when several
 # reference bipartitions collapse onto the same one inside a fold, the first wins.
-import random
 
 _LEAF_HASH = {}
 _HASH_RNG = random.Random(20160104)
