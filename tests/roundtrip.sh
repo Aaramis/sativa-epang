@@ -8,6 +8,8 @@
 #   C  staged, detached    -stage loo-tasks, then every fold copied to a scratch
 #                          directory of its own and placed there by manifest["command"]
 #                          with nothing else in scope, then -stage loo-score
+#   D  four steps          -stage reference, loo-tasks, loo-place, loo-score, each from a
+#                          separate invocation, as four workflow processes would be
 #
 # C is what a workflow manager does: each fold placed by a process with no access to the
 # reference, the taxonomy or the other folds, and only the jplace coming back.
@@ -80,15 +82,25 @@ done
 "$PYTHON" "$SATIVA" -r run.refjson -n run -o . "${ARGS[@]}" \
                     -stage loo-score -taskdir run.l1o_tasks > c3.log 2>&1
 
+# --- D: reference, tasks, placement and scoring as four separate runs ---------------
+echo "== D: four steps, four invocations"
+mkdir -p "$WORK/d" && cd "$WORK/d"
+"$PYTHON" "$SATIVA" -s "$ALN" -t "$TAX" -n run -o . "${ARGS[@]}" -stage reference   > d1.log 2>&1
+"$PYTHON" "$SATIVA" -r run.refjson -n run -o . "${ARGS[@]}" -stage loo-tasks        > d2.log 2>&1
+"$PYTHON" "$SATIVA" -stage loo-place -taskdir run.l1o_tasks -T "$THREADS"           > d3.log 2>&1
+"$PYTHON" "$SATIVA" -r run.refjson -n run -o . "${ARGS[@]}" \
+                    -stage loo-score -taskdir run.l1o_tasks                         > d4.log 2>&1
+
 # --- verdict -----------------------------------------------------------------------
 echo
 cd "$WORK"
-md5sum a/run.mis b/run.mis c/run.mis
-if diff -q a/run.mis b/run.mis > /dev/null && diff -q a/run.mis c/run.mis > /dev/null; then
-    echo "PASS: $(wc -l < a/run.mis) mislabels, identical in all three"
+md5sum a/run.mis b/run.mis c/run.mis d/run.mis
+fail=0
+for m in b c d; do
+    diff -q a/run.mis $m/run.mis > /dev/null || { echo "FAIL: $m differs from a"; diff a/run.mis $m/run.mis | head -20; fail=1; }
+done
+if [ $fail -eq 0 ]; then
+    echo "PASS: $(wc -l < a/run.mis) mislabels, identical in all four"
     exit 0
 fi
-echo "FAIL"
-diff a/run.mis b/run.mis | head -20
-diff a/run.mis c/run.mis | head -20
 exit 1

@@ -4,6 +4,7 @@ import sys
 import os
 import time
 import glob
+import shutil
 import multiprocessing
 from operator import itemgetter
 from subprocess import call
@@ -654,6 +655,35 @@ class LeaveOneTest:
         self.write_mislabels()
         config.log.info("\nTotal mislabels: %d / %.2f %%", len(self.mislabels), (float(len(self.mislabels)) / self.reftree_size * 100))
 
+def reference_model_path(refjson_fname):
+    """Where the model a reference was built under is kept: next to the refjson.
+
+    EPA-ng needs it, and it lives in the temp directory that gets cleaned at the end of the
+    run, so a reference reused later with -r would otherwise fall back to GTR+G -- slower,
+    and not the model the tree was built under.
+    """
+    return os.path.splitext(refjson_fname)[0] + ".model"
+
+
+def save_reference_model(config):
+    info = glob.glob(os.path.join(config.raxml_outdir, "RAxML_info.mfresolv*"))
+    if not info:
+        return None
+    dst = reference_model_path(config.refjson_fname)
+    shutil.copyfile(info[0], dst)
+    return dst
+
+
+def use_staged_model(*candidates):
+    """First candidate that exists becomes EPA-ng's model, unless one was set by hand."""
+    if os.environ.get("SATIVA_EPANG_MODEL"):
+        return
+    for cand in candidates:
+        if cand and os.path.isfile(cand):
+            os.environ["SATIVA_EPANG_MODEL"] = os.path.abspath(cand)
+            return
+
+
 def parse_args():
     parser = ArgumentParser(usage="%(prog)s -s ALIGNMENT -t TAXONOMY -x {BAC,BOT,ZOO,VIR} [options]",
     description=EpacConfig.SATIVA_INFO % "SATIVA",
@@ -717,11 +747,12 @@ Run name of the previous (terminated) job must be specified via -n option.""")
     parser.add_argument("-tmpdir", dest="temp_dir", default=None,
             help="""Directory for temporary files.""")
     parser.add_argument("-stage", dest="stage", default="all",
-            choices=["all", "loo-tasks", "loo-place", "loo-score"],
-            help="""Run one step of the leave-one-out instead of all of it, so that a
-            workflow manager can place the folds itself:
+            choices=["all", "reference", "loo-tasks", "loo-place", "loo-score"],
+            help="""Run one step of the analysis instead of all of it, so that a workflow
+            manager can schedule each with its own resources:
             all         the whole analysis, in this process (default)
-            loo-tasks   build the reference, write one directory per fold, stop
+            reference   build the reference tree, write NAME.refjson and NAME.model, stop
+            loo-tasks   write one directory per fold, stop (build the reference, or -r one)
             loo-place   run EPA-ng in every fold directory, stop (needs -taskdir only)
             loo-score   read the placed folds and finish the analysis (needs -r)
             Number of folds: SATIVA_EPANG_FOLDS, default 25.""")
@@ -878,7 +909,24 @@ if __name__ == "__main__":
         t.run_epa_trainer()
         trainer_time = time.time() - tr_start_time
         t.load_refjson(config.refjson_fname)
+        save_reference_model(config)
         config.log.info("*** STEP 2: Searching for mislabels ***\n")
+
+    if config.stage == "reference":
+        config.clean_tempdir()
+        config.log.info("\nReference written to: %s", os.path.abspath(config.refjson_fname))
+        config.log.info("Model written to:     %s", os.path.abspath(reference_model_path(config.refjson_fname)))
+        config.log.info("Next:\n  %s -r %s -n %s -o %s -stage loo-tasks\n",
+                        sys.argv[0], os.path.abspath(config.refjson_fname), config.name,
+                        os.path.abspath(config.output_dir))
+        sys.exit(0)
+
+    # Reusing a reference built earlier: pick its model back up rather than letting EPA-ng
+    # refit GTR+G. -stage loo-score prefers the copy the task directory carries, which is
+    # certain to be the one the folds were placed with.
+    if config.load_refjson:
+        use_staged_model(os.path.join(config.taskdir, "model") if config.stage == "loo-score" else None,
+                         reference_model_path(config.refjson_fname))
 
     if config.stage == "loo-tasks":
         manifest = t.emit_loo_tasks(config.taskdir)
@@ -890,15 +938,6 @@ if __name__ == "__main__":
                         sys.argv[0], os.path.abspath(config.refjson_fname), config.name,
                         os.path.abspath(config.output_dir), os.path.abspath(config.taskdir))
         sys.exit(0)
-
-    if config.stage == "loo-score":
-        # The confirmation pass wants the model the reference tree was built under, and
-        # starting from -r there is no RAxML_info to find: without this it would confirm
-        # under GTR+G and report different confidences than the one-shot run. -stage
-        # loo-tasks left the model in the task directory.
-        staged_model = os.path.join(config.taskdir, "model")
-        if os.path.isfile(staged_model) and not os.environ.get("SATIVA_EPANG_MODEL"):
-            os.environ["SATIVA_EPANG_MODEL"] = os.path.abspath(staged_model)
 
     l1out_start_time = time.time()
 

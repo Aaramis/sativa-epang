@@ -27,39 +27,63 @@ the branch labelling, the confidence computation and the reference tree step are
 
 ## Running the leave-one-out in steps
 
-`-stage` splits the leave-one-out into three, so a workflow manager can place the folds
-itself. `-stage all` is the default and calls the same three functions in one process, so
-there is no second code path.
+`-stage` splits the analysis into steps a workflow manager can schedule separately, each
+with its own resources. `-stage all` is the default and calls the same functions in one
+process, so there is no second code path.
 
 ```bash
-# 1. build the reference and write one directory per fold
-sativa.py -s aln.fasta -t taxonomy.tsv -x BOT -n run -o out -stage loo-tasks
+# 1. reference tree from the taxonomy. RAxML-bound, and the step worth its own resources.
+sativa.py -s aln.fasta -t taxonomy.tsv -x BOT -n run -o out -stage reference
 
-# 2. place every fold. Each fold directory holds ref.nwk, ref.fasta, query.fasta and model
+# 2. one directory per fold
+sativa.py -r out/run.refjson -n run -o out -stage loo-tasks
+
+# 3. place every fold. Each fold directory holds ref.nwk, ref.fasta, query.fasta and model
 #    and needs nothing outside itself; manifest.json carries the command to run in it.
 sativa.py -stage loo-place -taskdir out/run.l1o_tasks -T 8
 
-# 3. map the placements back onto the reference and finish the analysis
+# 4. map the placements back onto the reference and finish the analysis
 sativa.py -r out/run.refjson -n run -o out -stage loo-score -taskdir out/run.l1o_tasks
 ```
+
+Steps 1 and 2 can still be done together: `-stage loo-tasks` without `-r` builds the
+reference first, as before.
+
+`-stage reference` writes `NAME.model` next to `NAME.refjson`. EPA-ng needs the model the
+tree was built under, and it otherwise lives in the temp directory the run deletes, so a
+reference reused later with `-r` would silently fall back to fitting GTR+G itself: slower,
+and not the model the tree was built under. Any run that builds a reference now writes that
+file, and any run given `-r` picks it back up.
 
 `out/run.l1o_tasks/manifest.json` describes the whole job: the folds, which sequences are
 held out in each, the model, and the EPA-ng command to run in a fold directory. Step 3
 needs that manifest as well as the jplace files, because an EPA-ng edge number means
 nothing outside the fold that produced it.
 
-The three-step run and the one-shot run produce the same `.mis` file, byte for byte,
-whatever order the folds are placed in, because the placements are sorted before SATIVA
-sees them (`SATIVA_EPANG_SORT`). `tests/roundtrip.sh` checks it three ways, one of which
-copies every fold to a directory of its own and places it in a process that has no access to
-the reference or the other folds. Identical `.mis` at 38, 400 and 1600 sequences.
+The staged run and the one-shot run produce the same `.mis` file, byte for byte, whatever
+order the folds are placed in, because the placements are sorted before SATIVA sees them
+(`SATIVA_EPANG_SORT`). `tests/roundtrip.sh` checks it four ways: one shot, staged in place,
+staged with every fold copied to a directory of its own and placed in a process that has no
+access to the reference or the other folds, and the four steps run as four separate
+invocations. Identical `.mis` at 38, 400 and 1600 sequences.
 
 **On batching.** A batch of placements and a fold are the same thing: two held-out
 sequences can only share one EPA-ng call if they are held out together, their references
-differing by exactly the leaf under test. `SATIVA_EPANG_FOLDS` therefore trades placement
-time against agreement with the strict leave-one-out. On a 5185-taxon reference at `-T 2`,
-EPA-ng costs 3.8 s to set the reference up and 59.6 ms per query after that, so a fold of a
-few hundred queries spends about a fifth of its time on setup.
+differing by exactly the leaf under test. What that costs is set by the *fraction* of the
+reference a fold removes, `1/K`, not by how many sequences are in it: the measured point is
+4% removed, giving 0.98 recall and 0.90 precision against unmodified SATIVA. Batches of
+10 000 are 1% of a million sequences and 50% of twenty thousand.
+
+Cost of one EPA-ng call on a 5185-taxon reference: 3.8 s to set the reference up plus
+59.6 ms per query at `-T 2`, 3.0 s plus 15.7 ms at `-T 8`. Setup barely parallelises and
+placement nearly does, so a fold of a few hundred queries spends about a fifth of its time
+on setup and one of a few thousand almost none.
+
+Memory is the other bound, and the one that decides the shape at scale: each concurrent
+EPA-ng holds its own copy of the reference, about 3 GB at 5400 taxa on a 242-column
+alignment. Past a few hundred thousand taxa a single instance is the constraint rather than
+the orchestration, and the budget is better spent on threads inside one placement than on
+concurrent placements (`SATIVA_EPANG_FOLD_JOBS=1`).
 
 ## Environment variables
 
