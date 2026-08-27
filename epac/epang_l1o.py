@@ -1022,7 +1022,8 @@ def run_epang_l1o(refjson_tree_str, refaln_path, reftree_path, raxml_outdir,
     # the complete reference tree, and the branches that would have vanished with its own
     # leaf are then struck from its placement list and the remaining weights renormalised.
     # One reference setup instead of K is where the time goes. It is an approximation of the
-    # leave-one-out, not a reformulation of it: what it costs in agreement is in RESULTS.md.
+    # leave-one-out, not a reformulation of it: it agrees with the exact one on 0.54 of the
+    # calls, which is no better than lowering the number of folds at the same cost.
     #   SATIVA_EPANG_SELF_MASK=neighbour  pendant + sister + parent branch (default)
     #   SATIVA_EPANG_SELF_MASK=pendant    the query's own pendant branch only
     #   SATIVA_EPANG_SELF_MAX=<N>         placements kept per query before masking

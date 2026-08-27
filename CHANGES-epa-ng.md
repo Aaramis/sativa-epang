@@ -1,9 +1,14 @@
 # SATIVA with EPA-ng
 
 This branch replaces SATIVA's placement engine with EPA-ng (Barbera et al. 2019) and leaves
-everything else alone. It is the code measured in the benchmark at
-https://github.com/Aaramis/sativa-epang-benchmark, whose RESULTS.md carries the speed and
-agreement numbers, the ground-truth mislabel test, and the method.
+everything else alone.
+
+Measured against unmodified SATIVA v0.9.3 on ITS alignments, with the same reference tree in
+both: 257 s to 15.4 s at 1600 sequences on 8 threads, 1536 s to 87 s at 5402 on 16. The gain
+is parallelism over queries, which RAxML gets little of on a 242 column alignment. Agreement
+at 800 sequences with the default 25 folds is 0.98 recall and 0.90 precision, against
+0.92 / 0.90 when unmodified SATIVA merely changes its own substitution model. Of 33 mislabels
+injected into three clades, unmodified SATIVA finds 28 and this version 33.
 
 ## What differs from upstream
 
@@ -45,9 +50,9 @@ nothing outside the fold that produced it.
 
 The three-step run and the one-shot run produce the same `.mis` file, byte for byte,
 whatever order the folds are placed in, because the placements are sorted before SATIVA
-sees them (`SATIVA_EPANG_SORT`). `tests/roundtrip.sh` in the benchmark repository checks it
-three ways, one of which copies every fold to a directory of its own and places it in a
-process that has no access to the reference or the other folds.
+sees them (`SATIVA_EPANG_SORT`). `tests/roundtrip.sh` checks it three ways, one of which
+copies every fold to a directory of its own and places it in a process that has no access to
+the reference or the other folds. Identical `.mis` at 38, 400 and 1600 sequences.
 
 **On batching.** A batch of placements and a fold are the same thing: two held-out
 sequences can only share one EPA-ng call if they are held out together, their references
@@ -81,8 +86,9 @@ few hundred queries spends about a fifth of its time on setup.
 | `SATIVA_EPANG_PRECISION` | 10 | `--precision`, decimals in the jplace. |
 
 Two further approximations of the leave-one-out are implemented, off, and not recommended.
-They exist because `09_optimisations.sh` in the benchmark measures them, and what they cost
-is in `OPTIMISATIONS.md`.
+They agree with the exact leave-one-out on 0.54 and 0.73 of the calls respectively, which is
+no better than simply lowering the number of folds at the same cost. They are kept because
+that measurement is worth being able to repeat.
 
 | Variable | Default | Effect |
 |---|---|---|
