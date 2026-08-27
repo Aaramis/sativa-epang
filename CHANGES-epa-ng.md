@@ -135,3 +135,12 @@ binary as well as engine.
 
 Python 3 with `ete3`, and `epa-ng` 0.3.8 on `PATH` (or `SATIVA_EPANG_BIN`). A gcc able
 to build RAxML 8.2.3. SATIVA is GPL 3, and so is this copy; see `LICENSE`.
+
+There is also a conda package, submitted to bioconda as `sativa-epang`. It installs the
+command as **`sativa-epang`** rather than `sativa.py`, because the `sativa` package already
+claims that path and the two are meant to coexist:
+
+```bash
+conda install -c bioconda -c conda-forge sativa-epang
+sativa-epang -s aln.fasta -t taxonomy.tsv -x BOT -n run -o out
+```
