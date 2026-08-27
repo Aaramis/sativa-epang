@@ -654,14 +654,24 @@ def _run_screened(refbip, leaves, aln_by_leaf, reftree_path, model, workdir, thr
     return out
 
 
-def run_epang_l1o(refjson_tree_str, refaln_path, reftree_path, raxml_outdir,
-                  workdir, folds=5, threads=1, log=None):
-    t_start = time.time()
+# --- the leave-one-out in three steps -------------------------------------------------
+# Dealing the sequences into K folds and writing what each fold needs, placing every fold
+# with EPA-ng, and mapping the placements back onto the B= edge numbering. Each step reads
+# its input from a directory rather than from the previous call, so the middle one can be
+# run elsewhere:
+#
+#   emit_l1o_tasks()     taskdir/manifest.json, taskdir/fold_XXX/{ref.nwk,ref.fasta,query.fasta}
+#   place_l1o_tasks()    taskdir/fold_XXX/epa_result.jplace, or run manifest["command"]
+#   collect_l1o_tasks()  the placement list SATIVA classifies
+#
+# sativa.py exposes them as -stage {loo-tasks,loo-place,loo-score}. run_epang_l1o() below
+# calls the three in a row, so there is no second code path.
 
-    def _log(m):
-        if log: log.info("[epang-l1o] " + m)
-        else: sys.stderr.write("[epang-l1o] " + m + "\n")
+MANIFEST_VERSION = 1
 
+
+def _l1o_setup(refjson_tree_str, refaln_path, raxml_outdir, _log):
+    """Model, reference bipartitions and the alignment, keyed by leaf name."""
     # EPA-ng model: RAxML_info.mfresolv if present, otherwise GTR+G (EPA-ng re-evaluates)
     # SATIVA_EPANG_MODEL points EPA-ng at a model explicitly. It is needed when SATIVA is
     # started from a ready-made reference (-r): there is no RAxML_info in the working
@@ -694,34 +704,12 @@ def run_epang_l1o(refjson_tree_str, refaln_path, reftree_path, raxml_outdir,
 
     # sorted, so the folds and the per-fold alignments do not depend on the order the
     # leaves came out of the tree
-    leaves = sorted(leaves)
+    return {"model": model, "fast_map": fast_map, "refbip": refbip, "bidmap": bidmap,
+            "leaves": sorted(leaves), "aln_by_leaf": aln_by_leaf}
 
-    # SATIVA_EPANG_SELF_PLACE=1 drops the folds entirely: every sequence is placed once on
-    # the complete reference tree, and the branches that would have vanished with its own
-    # leaf are then struck from its placement list and the remaining weights renormalised.
-    # One reference setup instead of K is where the time goes. It is an approximation of the
-    # leave-one-out, not a reformulation of it: what it costs in agreement is in RESULTS.md.
-    #   SATIVA_EPANG_SELF_MASK=neighbour  pendant + sister + parent branch (default)
-    #   SATIVA_EPANG_SELF_MASK=pendant    the query's own pendant branch only
-    #   SATIVA_EPANG_SELF_MAX=<N>         placements kept per query before masking
-    if os.environ.get("SATIVA_EPANG_SELF_PLACE", "0").lower() in ("1", "on", "true", "yes"):
-        if refbip is None:
-            refbip = _RefBipartitions(refjson_tree_str)
-        return _run_self_place(refbip, leaves, aln_by_leaf, reftree_path, model,
-                               workdir, threads, _log)
 
-    # SATIVA_EPANG_SCREEN keeps the exact leave-one-out but only for the sequences a cheap
-    # first pass finds suspicious, which turns K placement runs into two.
-    if os.environ.get("SATIVA_EPANG_SCREEN"):
-        if refbip is None:
-            refbip = _RefBipartitions(refjson_tree_str)
-        return _run_screened(refbip, leaves, aln_by_leaf, reftree_path, model, workdir,
-                             threads, _log,
-                             float(os.environ["SATIVA_EPANG_SCREEN"]),
-                             int(os.environ.get("SATIVA_EPANG_SCREEN_HEIGHT", "3")))
-
-    full_tree = Tree(reftree_path, format=1)
-
+def _l1o_folds(leaves, reftree_path, folds, _log):
+    """Deal the leaves into K folds. Returns the list of folds, in fold order."""
     # How the folds are made up. By sequence name, the folds are random with respect to the
     # tree, so two sequences of the same species regularly leave the reference together and
     # neither can find the other on the way back: that is the k-fold approximation showing.
@@ -741,42 +729,58 @@ def run_epang_l1o(refjson_tree_str, refaln_path, reftree_path, raxml_outdir,
                  % (len(in_tree_order), len(leaves)))
 
     K = min(folds, len(ordered))
-    folds_list = [ordered[i::K] for i in range(K)]
+    return [ordered[i::K] for i in range(K)]
 
-    os.makedirs(workdir, exist_ok=True)
 
-    # Folds are independent: each prunes its own tree, writes its own alignment and runs
-    # its own EPA-ng. SATIVA_EPANG_FOLD_JOBS runs that many at once and splits the thread
-    # budget between them, which pays because EPA-ng's own scaling flattens well before
-    # the core count. It does not change the result: same folds, placements concatenated
-    # in fold order.
-    #
-    # Default: up to four folds at once. EPA-ng's own scaling flattens after a couple of
-    # threads, so this is where most of the wall clock goes; the cap is there because each
-    # concurrent EPA-ng holds its own copy of the reference (about 3 GB at 5400 taxa), and
-    # past four the memory bandwidth costs more than the parallelism returns. Raise it on a
-    # large node, set it to 1 to go back to one fold at a time.
-    fold_jobs = max(1, int(os.environ.get("SATIVA_EPANG_FOLD_JOBS",
-                                          str(min(K, threads, 4)))))
-    fold_threads = max(1, threads // fold_jobs)
+def emit_l1o_tasks(refjson_tree_str, refaln_path, reftree_path, raxml_outdir, taskdir,
+                   folds=5, log=None):
+    """Step 1. Write one self-contained directory per fold, plus manifest.json.
+
+    A fold directory holds the reference tree with that fold's leaves pruned away, the
+    matching reference alignment, the fold's queries and the model: everything one EPA-ng
+    call needs and nothing outside the directory. Returns the manifest.
+    """
+    def _log(m):
+        if log: log.info("[epang-l1o] " + m)
+        else: sys.stderr.write("[epang-l1o] " + m + "\n")
+
+    t_start = time.time()
+    setup = _l1o_setup(refjson_tree_str, refaln_path, raxml_outdir, _log)
+    leaves, aln_by_leaf = setup["leaves"], setup["aln_by_leaf"]
+    folds_list = _l1o_folds(leaves, reftree_path, folds, _log)
+
+    os.makedirs(taskdir, exist_ok=True)
+
+    # The model file has to travel with the tasks, and into every fold directory rather
+    # than once at the top, since a scheduler stages one directory at a time. It is a 3 kB
+    # RAxML_info. A model name (GTR+G) needs no file. The extra copy at the top is for
+    # -stage loo-score: the confirmation pass wants the same model, and by then the temp
+    # directory the reference was built in is gone.
+    model = setup["model"]
+    model_is_file = os.path.isfile(model)
+    model_arg = "model" if model_is_file else model
+    if model_is_file:
+        shutil.copyfile(model, os.path.join(taskdir, "model"))
+
+    full_tree = Tree(reftree_path, format=1)
     # copy(method="newick") serialises and reparses the tree on every fold. The string is
     # the same every time, so build it once; the flattened form feeds the fast prune.
     full_newick = full_tree.write(format=1)
     fast_prune = os.environ.get("SATIVA_EPANG_FAST_PRUNE", "1").lower() not in ("0", "off", "false")
     flat = _flatten_tree(full_tree) if fast_prune else None
 
-    # wall time spent preparing each fold (prune + alignments) and inside EPA-ng, summed
-    # over folds; with FOLD_JOBS>1 they overlap, so they add up to more than the elapsed time
-    spent = {"prep": 0.0, "epang": 0.0, "remap": 0.0}
-
-    def run_fold(item):
-        t_fold = time.time()
+    # The K folds write K copies of the reference alignment, 31 MB at 5402 sequences in 3K
+    # small files. On a network filesystem that is latency rather than throughput, so the
+    # folds are written a few at a time; fold_records is rebuilt in fold order below.
+    def write_fold(item):
         fi, fold = item
         fold_set = set(fold)
         ref_leaves = [l for l in leaves if l not in fold_set]
+        # fewer than four reference leaves leaves no tree to place into: skip, do not fail
         if len(ref_leaves) < 4 or not fold:
             return None
-        wd = os.path.join(workdir, "fold_%03d" % fi)
+        name = "fold_%03d" % fi
+        wd = os.path.join(taskdir, name)
         os.makedirs(wd, exist_ok=True)
         if fast_prune:
             with open(os.path.join(wd, "ref.nwk"), "w") as handle:
@@ -787,43 +791,156 @@ def run_epang_l1o(refjson_tree_str, refaln_path, reftree_path, raxml_outdir,
             tpr.write(outfile=os.path.join(wd, "ref.nwk"), format=5)
         _write_fasta({l: aln_by_leaf[l] for l in ref_leaves}, os.path.join(wd, "ref.fasta"))
         _write_fasta({l: aln_by_leaf[l] for l in fold},       os.path.join(wd, "query.fasta"))
-        cmd = [EPANG, "-t", os.path.join(wd, "ref.nwk"), "-s", os.path.join(wd, "ref.fasta"),
-               "-q", os.path.join(wd, "query.fasta"), "-m", model, "--outdir", wd, "--redo",
-               "-T", str(fold_threads)] + epang_placement_flags()
-        t_prep = time.time()
-        proc = subprocess.run(cmd, capture_output=True, text=True)
-        spent["prep"] += t_prep - t_fold
-        spent["epang"] += time.time() - t_prep
-        return fi, wd, proc
+        if model_is_file:
+            shutil.copyfile(model, os.path.join(wd, "model"))
+        return {"id": fi, "dir": name, "n_ref": len(ref_leaves), "queries": list(fold)}
 
-    if fold_jobs > 1:
+    write_jobs = max(1, int(os.environ.get("SATIVA_EPANG_EMIT_JOBS", "4")))
+    if write_jobs > 1 and len(folds_list) > 1:
         from concurrent.futures import ThreadPoolExecutor
-        with ThreadPoolExecutor(max_workers=fold_jobs) as pool:
-            outcomes = list(pool.map(run_fold, enumerate(folds_list)))
+        with ThreadPoolExecutor(max_workers=write_jobs) as pool:
+            written = list(pool.map(write_fold, enumerate(folds_list)))
     else:
-        outcomes = [run_fold(item) for item in enumerate(folds_list)]
+        written = [write_fold(item) for item in enumerate(folds_list)]
+    fold_records = [record for record in written if record is not None]
 
-    placements = []
-    t_remap = time.time()
-    for outcome in outcomes:
-        if outcome is None:
-            continue
-        fi, wd, r = outcome
+    manifest = {
+        "manifest_version": MANIFEST_VERSION,
+        "sativa_epang": "leave-one-out tasks",
+        "n_folds": len(fold_records),
+        "n_folds_planned": len(folds_list),
+        "n_leaves": len(leaves),
+        "model": model_arg,
+        "epang_args": epang_placement_flags(),
+        # every path relative to the fold directory, every file in it, so this is the
+        # command wherever the directory is staged. --redo for retries in place; add -T
+        # according to how many threads the caller wants to give one placement.
+        "command": ["epa-ng", "-t", "ref.nwk", "-s", "ref.fasta", "-q", "query.fasta",
+                    "-m", model_arg, "--outdir", ".", "--redo"] + epang_placement_flags(),
+        "output": "epa_result.jplace",
+        "leaves": leaves,
+        "folds": fold_records,
+    }
+    with open(os.path.join(taskdir, "manifest.json"), "w") as handle:
+        json.dump(manifest, handle, indent=1)
+        handle.write("\n")
+
+    _log("wrote %d fold tasks to %s (%.1fs)"
+         % (len(fold_records), taskdir, time.time() - t_start))
+    return manifest
+
+
+def read_l1o_manifest(taskdir):
+    with open(os.path.join(taskdir, "manifest.json")) as handle:
+        manifest = json.load(handle)
+    got = manifest.get("manifest_version")
+    if got != MANIFEST_VERSION:
+        raise RuntimeError("epang-l1o: %s was written by manifest version %s, this SATIVA "
+                           "reads version %d" % (taskdir, got, MANIFEST_VERSION))
+    return manifest
+
+
+def place_l1o_tasks(taskdir, threads=1, jobs=None, log=None):
+    """Step 2. Run EPA-ng once per fold directory, and return how many were placed.
+
+    Convenience: this is the step a workflow manager takes over, by running
+    manifest["command"] in each fold directory itself.
+    """
+    def _log(m):
+        if log: log.info("[epang-l1o] " + m)
+        else: sys.stderr.write("[epang-l1o] " + m + "\n")
+
+    t_start = time.time()
+    manifest = read_l1o_manifest(taskdir)
+    model = manifest["model"]
+    records = manifest["folds"]
+
+    # Folds are independent: each has its own tree, its own alignment and its own EPA-ng.
+    # SATIVA_EPANG_FOLD_JOBS runs that many at once and splits the thread budget between
+    # them, which pays because EPA-ng's own scaling flattens well before the core count.
+    # It does not change the result: same folds, placements collected in fold order.
+    #
+    # Default: up to four folds at once. The cap is there because each concurrent EPA-ng
+    # holds its own copy of the reference (about 3 GB at 5400 taxa), and past four the
+    # memory bandwidth costs more than the parallelism returns. Raise it on a large node,
+    # set it to 1 to go back to one fold at a time.
+    if jobs is None:
+        jobs = int(os.environ.get("SATIVA_EPANG_FOLD_JOBS",
+                                  str(min(max(1, len(records)), max(1, threads), 4))))
+    jobs = max(1, jobs)
+    fold_threads = max(1, threads // jobs)
+
+    def place(record):
+        wd = os.path.join(taskdir, record["dir"])
+        # manifest["command"] with the paths made absolute, so this runs from anywhere.
+        model_arg = os.path.join(wd, "model") if model == "model" else model
+        cmd = [EPANG, "-t", os.path.join(wd, "ref.nwk"), "-s", os.path.join(wd, "ref.fasta"),
+               "-q", os.path.join(wd, "query.fasta"), "-m", model_arg,
+               "--outdir", wd, "--redo", "-T", str(fold_threads)] + manifest["epang_args"]
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+        with open(os.path.join(wd, "epang.log"), "w") as handle:
+            handle.write(proc.stdout or "")
+            handle.write(proc.stderr or "")
+        if proc.returncode != 0 or not os.path.isfile(os.path.join(wd, "epa_result.jplace")):
+            _log("EPA-ng FAIL fold %d: %s" % (record["id"], (proc.stderr or "")[-300:]))
+            return 0
         if os.environ.get("SATIVA_EPANG_DEBUG"):
             # What EPA-ng makes of the model file it was handed. Above 500 taxa SATIVA
             # builds the reference tree under GTRCAT, and a CAT RAxML_info carries
             # "alpha: 1.000000" -- a placeholder, since CAT fits no gamma shape.
-            for line in (r.stdout or "").splitlines():
+            for line in (proc.stdout or "").splitlines():
                 if any(k in line.lower() for k in ("model", "alpha", "rate")):
                     _log("epa-ng says: " + line.strip())
-        jpf = os.path.join(wd, "epa_result.jplace")
-        if r.returncode != 0 or not os.path.isfile(jpf):
-            _log("EPA-ng FAIL fold %d: %s" % (fi, r.stderr[-300:])); continue
+        return 1
+
+    if jobs > 1:
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=jobs) as pool:
+            placed = sum(pool.map(place, records))
+    else:
+        placed = sum(place(record) for record in records)
+
+    _log("placed %d/%d folds (%d at a time, %d threads each, %.1fs)"
+         % (placed, len(records), jobs, fold_threads, time.time() - t_start))
+    return placed
+
+
+def collect_l1o_tasks(taskdir, refjson_tree_str, log=None):
+    """Step 3. Map every fold's EPA-ng edges back onto SATIVA's B= numbering.
+
+    Reads the jplace files whatever produced them and returns the placement list SATIVA
+    classifies. The mapping is per fold, an edge number meaning nothing outside the fold
+    that produced it, hence the manifest and not just the jplace files.
+    """
+    def _log(m):
+        if log: log.info("[epang-l1o] " + m)
+        else: sys.stderr.write("[epang-l1o] " + m + "\n")
+
+    t_remap = time.time()
+    manifest = read_l1o_manifest(taskdir)
+    leaves = manifest["leaves"]
+
+    fast_map = os.environ.get("SATIVA_EPANG_FAST_MAP", "1").lower() not in ("0", "off", "false")
+    if fast_map:
+        refbip = _RefBipartitions(refjson_tree_str)
+        bidmap = None
+    else:
+        refbip = None
+        bidmap, _allL = _bip_map(refjson_tree_str, "B")
+
+    placements = []
+    ie = ilwr = None
+    for record in manifest["folds"]:
+        fi = record["id"]
+        wd = os.path.join(taskdir, record["dir"])
+        jpf = os.path.join(wd, manifest["output"])
+        if not os.path.isfile(jpf):
+            _log("no placement for fold %d (%s)" % (fi, jpf)); continue
         d = json.load(open(jpf))
         ie = d["fields"].index("edge_num")
         epa2b = {}
+        fold_set = set(record["queries"])
         if fast_map:
-            fold_set = set(folds_list[fi])
             restricted = refbip.restrict([l for l in leaves if l not in fold_set])
             for key, e in _epa_edge_map(d["tree"]).items():
                 b = restricted.get(key)
@@ -880,7 +997,8 @@ def run_epang_l1o(refjson_tree_str, refaln_path, reftree_path, raxml_outdir,
     # EPA-ng above one thread returns the queries in whatever order its threads finish, and
     # at the accumulated-LWR boundary it occasionally keeps one placement more or one less.
     # Downstream that shows up as a different proposed label whenever two candidates tie.
-    # Sorting here costs nothing and makes the run reproducible.
+    # Sorting here costs nothing, makes the run reproducible, and makes the staged path
+    # agree with the single-process one whatever order the folds come back in.
     if os.environ.get("SATIVA_EPANG_SORT", "1").lower() not in ("0", "off", "false") \
             and placements:
         for pl in placements:
@@ -888,10 +1006,56 @@ def run_epang_l1o(refjson_tree_str, refaln_path, reftree_path, raxml_outdir,
                          else int(r[ie]))
         placements.sort(key=lambda p: p["n"][0])
 
-    spent["remap"] = time.time() - t_remap
-    _log("placements produits: %d (K=%d folds)" % (len(placements), K))
+    _log("placements produits: %d (K=%d folds, remap %.1fs)"
+         % (len(placements), len(manifest["folds"]), time.time() - t_remap))
+    return placements
+
+
+def run_epang_l1o(refjson_tree_str, refaln_path, reftree_path, raxml_outdir,
+                  workdir, folds=5, threads=1, log=None):
+    t_start = time.time()
+
+    def _log(m):
+        if log: log.info("[epang-l1o] " + m)
+        else: sys.stderr.write("[epang-l1o] " + m + "\n")
+
+    # SATIVA_EPANG_SELF_PLACE=1 drops the folds entirely: every sequence is placed once on
+    # the complete reference tree, and the branches that would have vanished with its own
+    # leaf are then struck from its placement list and the remaining weights renormalised.
+    # One reference setup instead of K is where the time goes. It is an approximation of the
+    # leave-one-out, not a reformulation of it: what it costs in agreement is in RESULTS.md.
+    #   SATIVA_EPANG_SELF_MASK=neighbour  pendant + sister + parent branch (default)
+    #   SATIVA_EPANG_SELF_MASK=pendant    the query's own pendant branch only
+    #   SATIVA_EPANG_SELF_MAX=<N>         placements kept per query before masking
+    #
+    # SATIVA_EPANG_SCREEN keeps the exact leave-one-out but only for the sequences a cheap
+    # first pass finds suspicious, which turns K placement runs into two.
+    #
+    # Neither has folds, so neither works through the staged entry points.
+    self_place = os.environ.get("SATIVA_EPANG_SELF_PLACE", "0").lower() in ("1", "on", "true", "yes")
+    screen = os.environ.get("SATIVA_EPANG_SCREEN")
+    if self_place or screen:
+        setup = _l1o_setup(refjson_tree_str, refaln_path, raxml_outdir, _log)
+        refbip = setup["refbip"] or _RefBipartitions(refjson_tree_str)
+        if self_place:
+            return _run_self_place(refbip, setup["leaves"], setup["aln_by_leaf"],
+                                   reftree_path, setup["model"], workdir, threads, _log)
+        return _run_screened(refbip, setup["leaves"], setup["aln_by_leaf"], reftree_path,
+                             setup["model"], workdir, threads, _log, float(screen),
+                             int(os.environ.get("SATIVA_EPANG_SCREEN_HEIGHT", "3")))
+
+    # the three staged steps, one after the other, in this process
+    t_prep = time.time()
+    emit_l1o_tasks(refjson_tree_str, refaln_path, reftree_path, raxml_outdir, workdir,
+                   folds=folds, log=log)
+    t_place = time.time()
+    place_l1o_tasks(workdir, threads=threads, log=log)
+    t_collect = time.time()
+    placements = collect_l1o_tasks(workdir, refjson_tree_str, log=log)
+
     _log("timing: fold prep %.1fs, epa-ng %.1fs, remap %.1fs, elapsed %.1fs"
-         % (spent["prep"], spent["epang"], spent["remap"], time.time() - t_start))
+         % (t_place - t_prep, t_collect - t_place, time.time() - t_collect,
+            time.time() - t_start))
     return placements
 
 

@@ -401,7 +401,14 @@ class LeaveOneTest:
     def run_leave_seq_out_test(self):
         job_name = self.cfg.subst_name("l1out_seq_%NAME%")
         placements = []
-        if self.cfg.jplace_fname:
+        if getattr(self.cfg, "stage", "all") == "loo-score":
+            # The folds were placed elsewhere; what is left is the mapping back onto this
+            # reference's B= numbering, which needs the manifest as well as the jplace
+            # files (an EPA-ng edge number is local to the fold that produced it).
+            from epac.epang_l1o import collect_l1o_tasks
+            placements = collect_l1o_tasks(self.cfg.taskdir, self.refjson.jdata["tree"],
+                                           log=self.cfg.log)
+        elif self.cfg.jplace_fname:
             if os.path.isdir(self.cfg.jplace_fname):
                 jplace_fmask = os.path.join(self.cfg.jplace_fname, '*.jplace')
             else:
@@ -592,14 +599,30 @@ class LeaveOneTest:
 
         return epa_result
 
+    def prepare_reference(self):
+        """Unpack the refjson into the files the placement steps read."""
+        self.refjson.get_raxml_readable_tree(self.reftree_fname)
+        self.refalign_fname = self.refjson.get_alignment(self.tmp_refaln)
+        self.refjson.get_binary_model(self.optmod_fname)
+
+    def emit_loo_tasks(self, taskdir):
+        """-stage loo-tasks: write the leave-one-out folds and stop.
+
+        Feed the same refjson back with -r and -stage loo-score.
+        """
+        from epac.epang_l1o import emit_l1o_tasks
+        self.prepare_reference()
+        folds = int(os.environ.get("SATIVA_EPANG_FOLDS", "25"))
+        return emit_l1o_tasks(self.refjson.jdata["tree"], self.refalign_fname,
+                              self.reftree_fname, self.cfg.raxml_outdir, taskdir,
+                              folds=folds, log=self.cfg.log)
+
     def run_test(self):
         self.raxml = RaxmlWrapper(self.cfg)
 
 #        config.log.info("Number of sequences in the reference: %d\n", self.reftree_size)
 
-        self.refjson.get_raxml_readable_tree(self.reftree_fname)
-        self.refalign_fname = self.refjson.get_alignment(self.tmp_refaln)        
-        self.refjson.get_binary_model(self.optmod_fname)
+        self.prepare_reference()
         
         if self.cfg.ranktest:
             config.log.info("Running the leave-one-rank-out test...\n")
@@ -693,6 +716,18 @@ Run name of the previous (terminated) job must be specified via -n option.""")
             help="""Test for misplaced higher ranks.""")
     parser.add_argument("-tmpdir", dest="temp_dir", default=None,
             help="""Directory for temporary files.""")
+    parser.add_argument("-stage", dest="stage", default="all",
+            choices=["all", "loo-tasks", "loo-place", "loo-score"],
+            help="""Run one step of the leave-one-out instead of all of it, so that a
+            workflow manager can place the folds itself:
+            all         the whole analysis, in this process (default)
+            loo-tasks   build the reference, write one directory per fold, stop
+            loo-place   run EPA-ng in every fold directory, stop (needs -taskdir only)
+            loo-score   read the placed folds and finish the analysis (needs -r)
+            Number of folds: SATIVA_EPANG_FOLDS, default 25.""")
+    parser.add_argument("-taskdir", dest="taskdir", default=None,
+            help="""Directory holding the leave-one-out folds, for -stage
+            (default: OUTPUT_DIR/NAME.l1o_tasks).""")
 
     args = parser.parse_args()
     if len(sys.argv) == 1: 
@@ -702,7 +737,26 @@ Run name of the previous (terminated) job must be specified via -n option.""")
     return args
 
 
-def check_args(args, parser):    
+def check_args(args, parser):
+    # -stage loo-place has no reference and needs none: it runs EPA-ng in directories that
+    # already hold everything, so it skips the reference requirements below.
+    if args.stage == "loo-place":
+        if not args.taskdir:
+            print("ERROR: -stage loo-place needs -taskdir\n")
+            sys.exit()
+        if not os.path.isdir(args.taskdir):
+            print("ERROR: task directory not found: %s" % args.taskdir)
+            sys.exit()
+        return
+
+    # loo-score must be given the reference the folds were built from: rebuilding it from
+    # -s/-t gives a tree whose edges the placements do not refer to, and the mismatch shows
+    # up as dropped placements rather than as an error.
+    if args.stage == "loo-score" and not args.ref_fname:
+        print("ERROR: -stage loo-score needs -r REFJSON, the reference written by "
+              "-stage loo-tasks\n")
+        sys.exit()
+
     if args.ref_fname:
         if args.align_fname:
             print("WARNING: -r and -s options are mutually exclusive! Your alignment file will be ignored.\n")
@@ -751,7 +805,15 @@ def check_args(args, parser):
     if not args.config_fname:
         args.config_fname = os.path.join(sativa_home, "sativa.cfg")
     if not args.temp_dir:
-        args.temp_dir = os.path.join(sativa_home, "tmp")
+        # SATIVA's temporary files go next to the code, which works for a checkout but not
+        # for an installed copy: a conda prefix or container image is read only, and
+        # concurrent tasks would share one directory. Fall back to the output directory.
+        bundled_tmp = os.path.join(sativa_home, "tmp")
+        writable = os.access(bundled_tmp, os.W_OK) if os.path.isdir(bundled_tmp) \
+                   else os.access(sativa_home, os.W_OK)
+        args.temp_dir = bundled_tmp if writable else os.path.join(args.output_dir, "sativa_tmp")
+    if not os.path.isdir(args.temp_dir):
+        os.makedirs(args.temp_dir, exist_ok=True)
     if not args.output_name:
         if args.taxonomy_fname:
             base_fname = args.taxonomy_fname
@@ -790,8 +852,18 @@ def print_run_info(config):
 
 if __name__ == "__main__":
     args = parse_args()
+
+    # -stage loo-place: EPA-ng in every fold directory and nothing else, so no reference,
+    # no taxonomy and no config. Running manifest["command"] in each fold directory with
+    # your own scheduler does the same thing.
+    if args.stage == "loo-place":
+        from epac.epang_l1o import place_l1o_tasks, read_l1o_manifest
+        wanted = len(read_l1o_manifest(args.taskdir)["folds"])
+        placed = place_l1o_tasks(args.taskdir, threads=args.num_threads)
+        sys.exit(0 if placed == wanted else 1)
+
     config = SativaConfig(args)
-    
+
     start_time = time.time()
     trainer_time = 0
     
@@ -807,11 +879,31 @@ if __name__ == "__main__":
         trainer_time = time.time() - tr_start_time
         t.load_refjson(config.refjson_fname)
         config.log.info("*** STEP 2: Searching for mislabels ***\n")
-    
+
+    if config.stage == "loo-tasks":
+        manifest = t.emit_loo_tasks(config.taskdir)
+        config.clean_tempdir()
+        config.log.info("\n%d leave-one-out folds written to: %s",
+                        manifest["n_folds"], os.path.abspath(config.taskdir))
+        config.log.info("Place them (any scheduler, one EPA-ng per fold directory), then:\n"
+                        "  %s -r %s -n %s -o %s -stage loo-score -taskdir %s\n",
+                        sys.argv[0], os.path.abspath(config.refjson_fname), config.name,
+                        os.path.abspath(config.output_dir), os.path.abspath(config.taskdir))
+        sys.exit(0)
+
+    if config.stage == "loo-score":
+        # The confirmation pass wants the model the reference tree was built under, and
+        # starting from -r there is no RAxML_info to find: without this it would confirm
+        # under GTR+G and report different confidences than the one-shot run. -stage
+        # loo-tasks left the model in the task directory.
+        staged_model = os.path.join(config.taskdir, "model")
+        if os.path.isfile(staged_model) and not os.environ.get("SATIVA_EPANG_MODEL"):
+            os.environ["SATIVA_EPANG_MODEL"] = os.path.abspath(staged_model)
+
     l1out_start_time = time.time()
-    
+
     t.run_test()
-    
+
     config.clean_tempdir()
         
     l1out_time = time.time() - l1out_start_time

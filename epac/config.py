@@ -398,7 +398,12 @@ class SativaConfig(EpacTrainerConfig):
                 
         if self.restart and os.path.isfile(self.refjson_fname):
             self.load_refjson = True
-        
+
+        # -stage / -taskdir, see sativa.py. The folds go next to the other output files
+        # by default, so a staged run needs no -taskdir.
+        self.stage = getattr(args, "stage", "all")
+        self.taskdir = getattr(args, "taskdir", None) or self.out_fname("%NAME%.l1o_tasks")
+
     def set_defaults(self):
         EpacTrainerConfig.set_defaults(self)
 
