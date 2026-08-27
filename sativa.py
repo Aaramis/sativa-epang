@@ -666,22 +666,47 @@ def reference_model_path(refjson_fname):
 
 
 def save_reference_model(config):
+    """Keep the model the reference was built under, next to the refjson.
+
+    Three cases: -refmodel naming a file (RAxML-NG writes one), -refmodel naming a model
+    string, or the RAxML_info of our own reference step. A string is written into the same
+    sidecar as a single line, and read back as a string rather than a path.
+    """
+    dst = reference_model_path(config.refjson_fname)
+    given = getattr(config, "user_refmodel", None)
+    if given and os.path.isfile(given):
+        shutil.copyfile(given, dst)
+        return dst
+    if given:
+        with open(dst, "w") as out:
+            out.write(given.strip() + "\n")
+        return dst
     info = glob.glob(os.path.join(config.raxml_outdir, "RAxML_info.mfresolv*"))
     if not info:
         return None
-    dst = reference_model_path(config.refjson_fname)
     shutil.copyfile(info[0], dst)
     return dst
 
 
 def use_staged_model(*candidates):
-    """First candidate that exists becomes EPA-ng's model, unless one was set by hand."""
+    """First candidate that exists becomes EPA-ng's model, unless one was set by hand.
+
+    A sidecar holding a single short line is a model string, not a model file: EPA-ng takes
+    either, but only if it is handed the right one.
+    """
     if os.environ.get("SATIVA_EPANG_MODEL"):
         return
     for cand in candidates:
-        if cand and os.path.isfile(cand):
+        if not cand or not os.path.isfile(cand):
+            continue
+        with open(cand) as handle:
+            head = handle.read(256)
+        lines = [l for l in head.splitlines() if l.strip()]
+        if len(lines) == 1 and len(head) < 200:
+            os.environ["SATIVA_EPANG_MODEL"] = lines[0].strip()
+        else:
             os.environ["SATIVA_EPANG_MODEL"] = os.path.abspath(cand)
-            return
+        return
 
 
 def parse_args():
@@ -756,6 +781,14 @@ Run name of the previous (terminated) job must be specified via -n option.""")
             loo-place   run EPA-ng in every fold directory, stop (needs -taskdir only)
             loo-score   read the placed folds and finish the analysis (needs -r)
             Number of folds: SATIVA_EPANG_FOLDS, default 25.""")
+    parser.add_argument("-reftree", dest="user_reftree", default=None,
+            help="""Reference tree inferred elsewhere (RAxML-NG, IQ-TREE, ...), in newick,
+            with the alignment's leaf names. Skips the constrained RAxML search: the tree is
+            taken as given, its branches are numbered with EPA-ng, and the taxonomy map and
+            node heights are computed from it. Use -refmodel to pass the matching model.""")
+    parser.add_argument("-refmodel", dest="user_refmodel", default=None,
+            help="""Model that goes with -reftree, as a RAxML-NG model string or file
+            (EPA-ng reads either). Default: GTR+G.""")
     parser.add_argument("-taskdir", dest="taskdir", default=None,
             help="""Directory holding the leave-one-out folds, for -stage
             (default: OUTPUT_DIR/NAME.l1o_tasks).""")
@@ -910,6 +943,10 @@ if __name__ == "__main__":
         trainer_time = time.time() - tr_start_time
         t.load_refjson(config.refjson_fname)
         save_reference_model(config)
+        if config.user_refmodel and not os.environ.get("SATIVA_EPANG_MODEL"):
+            # -refmodel is the model of the supplied tree; it is what EPA-ng should place
+            # under, in this run and in any later one started from this reference.
+            os.environ["SATIVA_EPANG_MODEL"] = config.user_refmodel
         config.log.info("*** STEP 2: Searching for mislabels ***\n")
 
     if config.stage == "reference":

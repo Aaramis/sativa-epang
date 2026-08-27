@@ -366,7 +366,45 @@ class RefTreeBuilder:
     
 
     # RAxML call to convert multifurcating tree to the strictly bifurcating one
+    def use_supplied_tree(self):
+        """-reftree: take the reference topology as given instead of inferring it.
+
+        The tree is expected to be bifurcating and to carry the alignment's leaf names --
+        what any ML inference on this alignment produces, RAxML-NG included. Everything the
+        reference needs after this point (branch labelling, the taxonomy map, node heights,
+        the speciation rate) is computed here or in python, so no RAxML run is involved.
+        """
+        import shutil as _shutil
+        src = getattr(self.cfg, "user_reftree", None)
+        tree = Tree(src, format=1)
+        # SATIVA prefixes reference names with r_ everywhere, taxonomy included. A tree
+        # inferred outside will usually carry the bare names, so add the prefix where it is
+        # missing rather than to everything -- prefixing twice passes the check below and
+        # then fails inside EPA-ng, which is a poor place to find out.
+        wanted = set(self.taxonomy.seq_ranks_map.keys())
+        for leaf in tree.iter_leaves():
+            if EpacConfig.REF_SEQ_PREFIX + leaf.name in wanted:
+                leaf.name = EpacConfig.REF_SEQ_PREFIX + leaf.name
+        leaves = set(tree.get_leaf_names())
+        missing = wanted - leaves
+        extra = leaves - wanted
+        if missing or extra:
+            self.cfg.exit_user_error(
+                "ERROR: the tree given with -reftree does not match the alignment: "
+                "%d leaves missing (e.g. %s), %d unknown (e.g. %s)"
+                % (len(missing), sorted(missing)[:2], len(extra), sorted(extra)[:2]))
+        tree.write(outfile=self.reftree_bfu_fname, format=5)
+        self.reduced_refalign_fname = self.refalign_fname
+        self.invocation_raxml_multif = "supplied via -reftree: %s" % os.path.abspath(src)
+        self.invocation_raxml_optmod = ""
+        self.reftree_loglh = 0.0
+        self.cfg.log.info("Using the reference tree given with -reftree: %s\n" % src)
+
     def resolve_multif(self):
+        if getattr(self.cfg, "user_reftree", None):
+            self.use_supplied_tree()
+            return
+
         self.cfg.log.debug("\nReducing the alignment: \n")
         self.reduced_refalign_fname = self.raxml_wrapper.reduce_alignment(self.refalign_fname)
         
@@ -437,11 +475,46 @@ class RefTreeBuilder:
             fout.write(">" + "DUMMY131313" + "\n")        
             fout.write("A"*self.refalign_width + "\n")        
         
+        if getattr(self.cfg, "user_reftree", None):
+            # The point of this step is only to get an edge-numbered copy of the reference
+            # tree: RAxML writes the numbering into its jplace, and EPA-ng writes the same
+            # `{n}` convention into its own, so placing the dummy query with EPA-ng gives
+            # exactly the same thing without a RAxML run.
+            self.reftree_lbl_str = self.epang_branch_labeling()
+            self.raxml_version = "not used (-reftree)"
+            self.invocation_raxml_epalbl = ""
+            return
+
         # TODO always load model regardless of the config file settings?
         epa_result = self.raxml_wrapper.run_epa(self.epalbl_job_name, self.lblalign_fname, self.reftree_bfu_fname, self.optmod_fname, mode="epa_mp")
         self.reftree_lbl_str = epa_result.get_std_newick_tree()
         self.raxml_version = epa_result.get_raxml_version()
         self.invocation_raxml_epalbl = epa_result.get_raxml_invocation()
+
+    def epang_branch_labeling(self):
+        """The reference tree with `[&&NHX:B=n]` on every branch, numbered by EPA-ng."""
+        import json as _json, subprocess as _subprocess
+        from epac.epang_l1o import EPANG, epang_placement_flags
+        wd = self.cfg.tmp_fname("%NAME%_epalbl")
+        os.makedirs(wd, exist_ok=True)
+        # RAxML takes reference and query in one file; EPA-ng wants them apart, and -s must
+        # hold exactly the tree's taxa, so the dummy query goes in a file of its own.
+        ref_fname = os.path.join(wd, "ref.fasta")
+        qry_fname = os.path.join(wd, "query.fasta")
+        self.reduced_refalign_seqs.write(format="fasta", outfile=ref_fname)
+        with open(qry_fname, "w") as fout:
+            fout.write(">DUMMY131313\n" + "A" * self.refalign_width + "\n")
+        model = getattr(self.cfg, "user_refmodel", None) or "GTR+G"
+        cmd = [EPANG, "-t", self.reftree_bfu_fname, "-s", ref_fname,
+               "-q", qry_fname, "-m", model, "--outdir", wd, "--redo",
+               "-T", str(self.cfg.num_threads), "--filter-max", "1"]
+        proc = _subprocess.run(cmd, capture_output=True, text=True)
+        jpf = os.path.join(wd, "epa_result.jplace")
+        if proc.returncode != 0 or not os.path.isfile(jpf):
+            self.cfg.exit_fatal_error(
+                "EPA-ng failed while labelling the reference branches:\n%s" % proc.stderr[-800:])
+        tree = _json.load(open(jpf))["tree"]
+        return tree.replace("{", "[&&NHX:B=").replace("}", "]")
 
         if not self.raxml_wrapper.epa_result_exists(self.epalbl_job_name):        
             errmsg = "RAxML EPA run failed, please examine the log for details: %s" \

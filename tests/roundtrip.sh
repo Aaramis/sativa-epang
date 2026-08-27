@@ -10,6 +10,8 @@
 #                          with nothing else in scope, then -stage loo-score
 #   D  four steps          -stage reference, loo-tasks, loo-place, loo-score, each from a
 #                          separate invocation, as four workflow processes would be
+#   E  supplied tree       D's reference tree and model fed back through -reftree/-refmodel,
+#                          so the reference is built without RAxML inferring the topology
 #
 # C is what a workflow manager does: each fold placed by a process with no access to the
 # reference, the taxonomy or the other folds, and only the jplace coming back.
@@ -91,16 +93,27 @@ mkdir -p "$WORK/d" && cd "$WORK/d"
 "$PYTHON" "$SATIVA" -r run.refjson -n run -o . "${ARGS[@]}" \
                     -stage loo-score -taskdir run.l1o_tasks                         > d4.log 2>&1
 
+# --- E: the same reference, from a tree given rather than inferred ------------------
+echo "== E: reference from a supplied tree"
+mkdir -p "$WORK/e" && cd "$WORK/e"
+"$PYTHON" -c "import json,sys; open('supplied.nwk','w').write(json.load(open(sys.argv[1]))['raxmltree'])" "$WORK/d/run.refjson"
+"$PYTHON" "$SATIVA" -s "$ALN" -t "$TAX" -n run -o . "${ARGS[@]}" \
+                    -stage reference -reftree supplied.nwk -refmodel "$WORK/d/run.model" > e1.log 2>&1
+"$PYTHON" "$SATIVA" -r run.refjson -n run -o . "${ARGS[@]}" -stage loo-tasks          > e2.log 2>&1
+"$PYTHON" "$SATIVA" -stage loo-place -taskdir run.l1o_tasks -T "$THREADS"              > e3.log 2>&1
+"$PYTHON" "$SATIVA" -r run.refjson -n run -o . "${ARGS[@]}" \
+                    -stage loo-score -taskdir run.l1o_tasks                            > e4.log 2>&1
+
 # --- verdict -----------------------------------------------------------------------
 echo
 cd "$WORK"
-md5sum a/run.mis b/run.mis c/run.mis d/run.mis
+md5sum a/run.mis b/run.mis c/run.mis d/run.mis e/run.mis
 fail=0
-for m in b c d; do
+for m in b c d e; do
     diff -q a/run.mis $m/run.mis > /dev/null || { echo "FAIL: $m differs from a"; diff a/run.mis $m/run.mis | head -20; fail=1; }
 done
 if [ $fail -eq 0 ]; then
-    echo "PASS: $(wc -l < a/run.mis) mislabels, identical in all four"
+    echo "PASS: $(wc -l < a/run.mis) mislabels, identical in all five"
     exit 0
 fi
 exit 1

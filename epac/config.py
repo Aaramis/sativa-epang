@@ -399,6 +399,11 @@ class SativaConfig(EpacTrainerConfig):
         if self.restart and os.path.isfile(self.refjson_fname):
             self.load_refjson = True
 
+        # -reftree / -refmodel, see sativa.py: a reference topology inferred elsewhere
+        # (RAxML-NG, IQ-TREE) instead of the constrained RAxML search.
+        self.user_reftree = getattr(args, "user_reftree", None)
+        self.user_refmodel = getattr(args, "user_refmodel", None)
+
         # -stage / -taskdir, see sativa.py. The folds go next to the other output files
         # by default, so a staged run needs no -taskdir.
         self.stage = getattr(args, "stage", "all")

@@ -49,6 +49,27 @@ sativa.py -r out/run.refjson -n run -o out -stage loo-score -taskdir out/run.l1o
 Steps 1 and 2 can still be done together: `-stage loo-tasks` without `-r` builds the
 reference first, as before.
 
+### A reference tree inferred elsewhere
+
+`-reftree` takes the topology as given instead of running the constrained RAxML search, and
+`-refmodel` the model that goes with it, as a RAxML-NG model string or file:
+
+```bash
+sativa.py -s aln.fasta -t taxonomy.tsv -x BOT -n run -o out -stage reference \
+          -reftree raxml-ng.bestTree -refmodel raxml-ng.bestModel
+```
+
+Nothing about the refjson is tied to RAxML. The branch `B=` values are identifiers shared
+between the tree and `branch_tax_map`, and that map, the node heights and the speciation
+rate are all computed in python from the tree and the taxonomy. The branch numbering itself
+comes from placing a dummy query and reading the numbered tree out of the jplace, which
+RAxML and EPA-ng write in the same `{n}` convention — so with `-reftree` it is EPA-ng that
+does it, and no RAxML runs at all. `binary_model` is then empty; only the RAxML fallback
+ever reads it.
+
+Feeding a reference's own tree back through `-reftree` reproduces its `.mis` byte for byte,
+which is mode E of `tests/roundtrip.sh`.
+
 `-stage reference` writes `NAME.model` next to `NAME.refjson`. EPA-ng needs the model the
 tree was built under, and it otherwise lives in the temp directory the run deletes, so a
 reference reused later with `-r` would silently fall back to fitting GTR+G itself: slower,
@@ -64,8 +85,9 @@ The staged run and the one-shot run produce the same `.mis` file, byte for byte,
 order the folds are placed in, because the placements are sorted before SATIVA sees them
 (`SATIVA_EPANG_SORT`). `tests/roundtrip.sh` checks it four ways: one shot, staged in place,
 staged with every fold copied to a directory of its own and placed in a process that has no
-access to the reference or the other folds, and the four steps run as four separate
-invocations. Identical `.mis` at 38, 400 and 1600 sequences.
+access to the reference or the other folds, the four steps run as four separate invocations,
+and the reference rebuilt from a supplied tree. Identical `.mis` at 38, 400 and 1600
+sequences.
 
 **On batching.** A batch of placements and a fold are the same thing: two held-out
 sequences can only share one EPA-ng call if they are held out together, their references

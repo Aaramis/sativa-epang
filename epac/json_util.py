@@ -326,7 +326,13 @@ class RefJsonBuilder:
     def set_nodes_height(self, height):    
         self.jdata["node_height"] = height
 
-    def set_binary_model(self, model_fname):  
+    def set_binary_model(self, model_fname):
+        # Only the RAxML leave-one-out reads this back; with EPA-ng doing the placement
+        # there may be no RAxML run to produce it, and an empty field is what the reader
+        # then gets. The field itself stays, since validate() requires it.
+        if not model_fname or not os.path.isfile(model_fname):
+            self.jdata["binary_model"] = ""
+            return
         with open(model_fname, "rb") as fin:
             model_str = base64.b64encode(fin.read())
         self.jdata["binary_model"] = model_str.decode()
