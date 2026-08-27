@@ -12,7 +12,7 @@ remapped to B= by leaf bipartition. All placements are kept
 """
 import os, sys, re, json, glob, random, subprocess, shutil, time
 sys.setrecursionlimit(200000)
-from ete3 import Tree
+from .ete2 import Tree
 
 # epa-ng resolved from PATH (provided by the sativa.yaml conda env); overridable
 # via SATIVA_EPANG_BIN.

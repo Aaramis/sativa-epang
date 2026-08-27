@@ -1,0 +1,68 @@
+
+
+WARNING: RAxML is not checking sequences for duplicate seqs and sites with missing data!
+
+
+
+Using BFGS method to optimize GTR rate parameters, to disable this specify "--no-bfgs" 
+
+Found a total of 1600 taxa in tree file /pools/apollon/ummisco/home/agardette/augmentation_taxonomie/augmentation_taxonomie/21.sativa_epang_nfcore/sativa-epang/tmp/run_1787822977249/run_bfu.tre
+
+
+This is RAxML version 8.2.3 released by Alexandros Stamatakis on August 12 2015.
+
+With greatly appreciated code contributions by:
+Andre Aberer      (HITS)
+Simon Berger      (HITS)
+Alexey Kozlov     (HITS)
+Kassian Kobert    (HITS)
+David Dao         (KIT and HITS)
+Nick Pattengale   (Sandia)
+Wayne Pfeiffer    (SDSC)
+Akifumi S. Tanabe (NRIFS)
+
+Alignment has 242 distinct alignment patterns
+
+Proportion of gaps and completely undetermined characters in this alignment: 2.80%
+
+RAxML parsimony-based placement algorithm
+
+Using 1 distinct models/data partitions with joint branch length optimization
+
+
+All free model parameters will be estimated by RAxML
+GAMMA model of rate heteorgeneity, ML estimate of alpha-parameter
+
+Partition: 0
+Alignment Patterns: 242
+Name: No Name Provided
+DataType: DNA
+Substitution Matrix: GTR
+
+
+
+
+RAxML was called as follows:
+
+/pools/apollon/ummisco/home/agardette/augmentation_taxonomie/augmentation_taxonomie/21.sativa_epang_nfcore/sativa-epang/raxml/raxmlHPC8-AVX2.PTHREADS -w /pools/apollon/ummisco/home/agardette/augmentation_taxonomie/augmentation_taxonomie/21.sativa_epang_nfcore/sativa-epang/tmp/run_1787822977249 -T 16 -s /pools/apollon/ummisco/home/agardette/augmentation_taxonomie/augmentation_taxonomie/21.sativa_epang_nfcore/sativa-epang/tmp/run_1787822977249/run_lblq.fa -t /pools/apollon/ummisco/home/agardette/augmentation_taxonomie/augmentation_taxonomie/21.sativa_epang_nfcore/sativa-epang/tmp/run_1787822977249/run_bfu.tre --no-seq-check -f y --epa-accumulated-threshold 0.999 -G 0.3125 -R /pools/apollon/ummisco/home/agardette/augmentation_taxonomie/augmentation_taxonomie/21.sativa_epang_nfcore/sativa-epang/tmp/run_1787822977249/run.opt -m GTRGAMMA -n epalbl_run -p 820 
+
+
+RAxML placement algorithm: You provided a reference tree with 1600 taxa; alignmnet has 1601 taxa
+1 query taxa will be placed using parsimony
+
+RAxML Evolutionary Placement Algorithm using parsimony
+
+parsimony score of reference tree: 9820
+
+RAxML will place 1 Query Sequences into the 3197 branches of the reference tree with 1600 taxa
+
+Overall Classification time: 0.083999
+
+Equally parsimonious read placements written to file: /pools/apollon/ummisco/home/agardette/augmentation_taxonomie/augmentation_taxonomie/21.sativa_epang_nfcore/sativa-epang/tmp/run_1787822977249/RAxML_equallyParsimoniousPlacements.epalbl_run
+
+Labelled reference tree with branch labels (without query sequences) written to file: /pools/apollon/ummisco/home/agardette/augmentation_taxonomie/augmentation_taxonomie/21.sativa_epang_nfcore/sativa-epang/tmp/run_1787822977249/RAxML_originalLabelledTree.epalbl_run
+
+Labelled reference tree with branch labels in portable pplacer/EPA format (without query sequences) written to file: /pools/apollon/ummisco/home/agardette/augmentation_taxonomie/augmentation_taxonomie/21.sativa_epang_nfcore/sativa-epang/tmp/run_1787822977249/RAxML_portableTree.epalbl_run.jplace
+
+Labelled reference tree including branch labels and query sequences written to file: /pools/apollon/ummisco/home/agardette/augmentation_taxonomie/augmentation_taxonomie/21.sativa_epang_nfcore/sativa-epang/tmp/run_1787822977249/RAxML_labelledTree.epalbl_run
+
