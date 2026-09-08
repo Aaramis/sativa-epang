@@ -1,8 +1,43 @@
-SATIVA
-======
+SATIVA with EPA-ng
+==================
+
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22660415.svg)](https://doi.org/10.5281/zenodo.22660415)
+[![install with bioconda](https://img.shields.io/badge/install%20with-bioconda-brightgreen.svg)](https://anaconda.org/bioconda/sativa-epang)
+[![License](https://img.shields.io/badge/license-GPL3-blue.svg)](http://www.gnu.org/licenses/gpl-3.0.en.html)
+
+This is the `epa-ng` branch of a fork of [amkozlov/sativa](https://github.com/amkozlov/sativa).
+It replaces the RAxML placement engine with EPA-ng in both the leave-one-out and the final
+confirmation pass, and lets the leave-one-out be driven one step at a time so a workflow
+manager can distribute it. SATIVA's classification and decision logic is unchanged.
+**[CHANGES-epa-ng.md](CHANGES-epa-ng.md) documents what differs, how to run the steps, and
+what was measured.** The README below is upstream's.
+
+```bash
+conda install -c bioconda -c conda-forge sativa-epang
+sativa-epang -s aln.fasta -t taxonomy.tsv -x BOT -n run -o out
+```
+
+Citation
+--------
+
+If you use this fork, please cite both it and the original SATIVA paper, whose algorithm it
+implements:
+
+- Gardette A. *sativa-epang: SATIVA with EPA-ng as the placement engine.* Zenodo.
+  [doi:10.5281/zenodo.22660415](https://doi.org/10.5281/zenodo.22660415)
+- Kozlov AM, Zhang J, Yilmaz P, Glöckner FO, Stamatakis A. *Phylogeny-aware identification
+  and correction of taxonomically mislabeled sequences.* Nucleic Acids Research 2016;44:5022-33.
+  [doi:10.1093/nar/gkw396](https://doi.org/10.1093/nar/gkw396)
+- Barbera P, Kozlov AM, Czech L, Morel B, Darriba D, Flouri T, Stamatakis A. *EPA-ng: massively
+  parallel evolutionary placement of genetic sequences.* Systematic Biology 2019;68:365-9.
+  [doi:10.1093/sysbio/syy054](https://doi.org/10.1093/sysbio/syy054)
+
+---
+
+Upstream README
+===============
 
 [![Build Status](https://travis-ci.org/amkozlov/sativa.svg?branch=master)](https://travis-ci.org/amkozlov/sativa)
-[![License](https://img.shields.io/badge/license-GPL3-blue.svg)](http://www.gnu.org/licenses/gpl-3.0.en.html)
 
 SATIVA (**S**emi-**A**utomatic **T**axonomy **I**mprovement and **V**alidation **A**lgorithm) is a pipeline
 that uses Evolutionary Placement Algorithm (EPA, [1]) to identify taxonomically mislabeled sequences
