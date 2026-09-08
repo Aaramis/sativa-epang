@@ -21,9 +21,14 @@ whole difference is:
 | `epac/epang_l1o.py` | New. `run_epang_l1o()` (pass 1) and `run_epang_final()` (pass 2), plus the mapping from EPA-ng edge numbers back to SATIVA's `B=` numbering, and the three staged steps `run_epang_l1o()` is built from. |
 | `epac/config.py` | `shutil.rmtree(..., ignore_errors=True)` when cleaning the temp directory, which otherwise races on a parallel filesystem. Carries `-stage` and `-taskdir`. |
 
-`epac/classify_util.py`, `epac/taxonomy_util.py`, `epac/json_util.py`,
-`epac/raxml_util.py` and `epac/msa.py` are byte identical to upstream. The decision rule,
-the branch labelling, the confidence computation and the reference tree step are untouched.
+`epac/classify_util.py` and `epac/msa.py` are byte identical to upstream.
+`epac/taxonomy_util.py` and `epac/raxml_util.py` differ by one line each, a regex marked raw
+so python 3.12 stops warning about an invalid escape; the strings themselves are unchanged.
+`epac/json_util.py` lets `set_binary_model()` accept a missing file, since the RAxML binary
+model it reads is not produced when EPA-ng does the placement.
+
+What matters is untouched: the decision rule, the branch labelling, the confidence
+computation and the reference tree step are upstream's.
 
 ## Running the leave-one-out in steps
 
