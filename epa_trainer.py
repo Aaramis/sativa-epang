@@ -672,10 +672,16 @@ class RefTreeBuilder:
         self.export_ref_taxonomy()
         self.cfg.log.info("======> Saving the outgroup for later re-rooting ...\n")
         self.save_rooting()
-        self.cfg.log.info("=======> Resolving multifurcation: choosing the best topology from %d independent RAxML runs ...\n" % self.cfg.rep_num)
+        if getattr(self.cfg, "user_reftree", None):
+            self.cfg.log.info("=======> Taking the reference tree as given (-reftree), no RAxML search ...\n")
+        else:
+            self.cfg.log.info("=======> Resolving multifurcation: choosing the best topology from %d independent RAxML runs ...\n" % self.cfg.rep_num)
         self.resolve_multif()
         self.load_reduced_refalign()
-        self.cfg.log.info("========> Calling RAxML-EPA to obtain branch labels ...\n")
+        if getattr(self.cfg, "user_reftree", None):
+            self.cfg.log.info("========> Calling EPA-ng to obtain branch labels ...\n")
+        else:
+            self.cfg.log.info("========> Calling RAxML-EPA to obtain branch labels ...\n")
         self.epa_branch_labeling()
         self.cfg.log.info("=========> Post-processing the EPA tree (re-rooting, taxonomic labeling etc.) ...\n")
         self.epa_post_process()

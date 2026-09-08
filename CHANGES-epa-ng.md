@@ -107,6 +107,12 @@ alignment. Past a few hundred thousand taxa a single instance is the constraint 
 the orchestration, and the budget is better spent on threads inside one placement than on
 concurrent placements (`SATIVA_EPANG_FOLD_JOBS=1`).
 
+## Version
+
+`sativa.py -version` prints it, and so does the banner every run writes. `SATIVA_EPANG_BUILD`
+in `epac/version.py` carries the fork's version and is bumped on every release tag;
+`SATIVA_BUILD` stays at the upstream SATIVA release this is based on.
+
 ## Environment variables
 
 | Variable | Default | Effect |

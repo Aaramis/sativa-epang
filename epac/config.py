@@ -11,7 +11,7 @@ import random
 import multiprocessing
 import configparser
 
-from epac.version import SATIVA_BUILD,SATIVA_RELEASE_DATE,SATIVA_RAXML_VER
+from epac.version import SATIVA_BUILD,SATIVA_RELEASE_DATE,SATIVA_RAXML_VER,SATIVA_EPANG_BUILD
 
 class DefaultedConfigParser(configparser.ConfigParser):
     def get_param(self, section, option, ctype=str, default=None):
@@ -41,9 +41,10 @@ class EpacConfig:
     EPA_HEUR_THRES    = 1000
     
     SATIVA_INFO = \
-    """%s %s, released on %s. Last version: https://github.com/amkozlov/sativa 
-By A.Kozlov and J.Zhang, the Exelixis Lab. Based on RAxML %s by A.Stamatakis.\n"""\
-    % ("%s", SATIVA_BUILD, SATIVA_RELEASE_DATE, SATIVA_RAXML_VER)
+    """%s, EPA-ng fork %s, based on SATIVA %s released on %s.
+SATIVA by A.Kozlov and J.Zhang, the Exelixis Lab, on RAxML %s by A.Stamatakis.
+Placement by EPA-ng (Barbera et al. 2019). Fork: https://github.com/Aaramis/sativa-epang\n"""\
+    % ("%s", SATIVA_EPANG_BUILD, SATIVA_BUILD, SATIVA_RELEASE_DATE, SATIVA_RAXML_VER)
     
     
     @staticmethod

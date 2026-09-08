@@ -781,6 +781,8 @@ Run name of the previous (terminated) job must be specified via -n option.""")
             loo-place   run EPA-ng in every fold directory, stop (needs -taskdir only)
             loo-score   read the placed folds and finish the analysis (needs -r)
             Number of folds: SATIVA_EPANG_FOLDS, default 25.""")
+    parser.add_argument("-version", "--version", dest="show_version", action="store_true",
+            help="""Print the version and exit.""")
     parser.add_argument("-reftree", dest="user_reftree", default=None,
             help="""Reference tree inferred elsewhere (RAxML-NG, IQ-TREE, ...), in newick,
             with the alignment's leaf names. Skips the constrained RAxML search: the tree is
@@ -794,6 +796,10 @@ Run name of the previous (terminated) job must be specified via -n option.""")
             (default: OUTPUT_DIR/NAME.l1o_tasks).""")
 
     args = parser.parse_args()
+    if getattr(args, "show_version", False):
+        from epac.version import SATIVA_EPANG_BUILD, SATIVA_BUILD
+        print("sativa-epang %s (SATIVA %s with EPA-ng placement)" % (SATIVA_EPANG_BUILD, SATIVA_BUILD))
+        sys.exit(0)
     if len(sys.argv) == 1: 
         parser.print_help()
         sys.exit()
@@ -812,6 +818,19 @@ def check_args(args, parser):
             print("ERROR: task directory not found: %s" % args.taskdir)
             sys.exit()
         return
+
+    # -reftree without -refmodel would place under GTR+G without saying so, and the run
+    # would look normal while being scored under a model nobody chose. Make the caller say
+    # it, even if what they want is GTR+G.
+    if args.user_reftree and not args.user_refmodel:
+        print("ERROR: -reftree needs -refmodel, the model the tree was inferred under.\n"
+              "       Pass the RAxML-NG model file, or -refmodel 'GTR+G' if that is really\n"
+              "       what you want. Placing under a model nobody chose is not a default.\n")
+        sys.exit()
+    if args.user_refmodel and not args.user_reftree:
+        print("ERROR: -refmodel only applies with -reftree.\n"
+              "       Use SATIVA_EPANG_MODEL to set the model of a reference built here.\n")
+        sys.exit()
 
     # loo-score must be given the reference the folds were built from: rebuilding it from
     # -s/-t gives a tree whose edges the placements do not refer to, and the mismatch shows
