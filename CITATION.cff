@@ -1,0 +1,85 @@
+cff-version: 1.2.0
+title: "sativa-epang: SATIVA with EPA-ng as the placement engine"
+message: >-
+  If you use this software, please cite both this record and the original
+  SATIVA paper (Kozlov et al. 2016), whose algorithm it implements.
+type: software
+authors:
+  - given-names: Auguste
+    family-names: Gardette
+    email: auguste.gardette@ird.fr
+    affiliation: "UMMISCO, IRD / Sorbonne Université, France"
+    # orcid: "https://orcid.org/0000-0000-0000-0000"
+repository-code: "https://github.com/Aaramis/sativa-epang"
+url: "https://github.com/Aaramis/sativa-epang/blob/epa-ng/CHANGES-epa-ng.md"
+version: 0.9.3.4
+date-released: "2026-08-27"
+license: GPL-3.0-or-later
+keywords:
+  - taxonomy
+  - phylogenetic placement
+  - reference database curation
+  - mislabel detection
+  - 16S rRNA
+  - ITS
+abstract: >-
+  A fork of SATIVA (Kozlov et al. 2016) that replaces the RAxML placement
+  engine with EPA-ng (Barbera et al. 2019) in both the leave-one-out and the
+  final confirmation pass, while leaving SATIVA's classification and decision
+  logic unchanged: EPA-ng edges are mapped back onto SATIVA's own branch
+  numbering by leaf bipartition. Measured against unmodified SATIVA v0.9.3 on
+  ITS alignments, the leave-one-out drops from 257 s to 15.4 s at 1600
+  sequences and from 1536 s to 87 s at 5402, with 0.98 recall and 0.90
+  precision at 800 sequences. The leave-one-out can also be driven one step at
+  a time, so a workflow manager can build the reference, prepare the folds,
+  place them across a cluster and score the result as separate jobs, with
+  byte-identical output either way. Distributed through Bioconda as
+  sativa-epang.
+references:
+  - type: article
+    title: >-
+      Phylogeny-aware identification and correction of taxonomically mislabeled
+      sequences
+    authors:
+      - family-names: Kozlov
+        given-names: Alexey M.
+      - family-names: Zhang
+        given-names: Jiajie
+      - family-names: Yilmaz
+        given-names: Pelin
+      - family-names: Glöckner
+        given-names: Frank Oliver
+      - family-names: Stamatakis
+        given-names: Alexandros
+    journal: Nucleic Acids Research
+    year: 2016
+    volume: 44
+    issue: 11
+    start: 5022
+    end: 5033
+    doi: 10.1093/nar/gkw396
+  - type: article
+    title: >-
+      EPA-ng: massively parallel evolutionary placement of genetic sequences
+    authors:
+      - family-names: Barbera
+        given-names: Pierre
+      - family-names: Kozlov
+        given-names: Alexey M.
+      - family-names: Czech
+        given-names: Lucas
+      - family-names: Morel
+        given-names: Benoit
+      - family-names: Darriba
+        given-names: Diego
+      - family-names: Flouri
+        given-names: Tomáš
+      - family-names: Stamatakis
+        given-names: Alexandros
+    journal: Systematic Biology
+    year: 2019
+    volume: 68
+    issue: 2
+    start: 365
+    end: 369
+    doi: 10.1093/sysbio/syy054

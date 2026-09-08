@@ -1,0 +1,49 @@
+{
+  "title": "sativa-epang: SATIVA with EPA-ng as the placement engine",
+  "upload_type": "software",
+  "license": "GPL-3.0-or-later",
+  "access_right": "open",
+  "version": "0.9.3.4",
+  "language": "eng",
+  "creators": [
+    {
+      "name": "Gardette, Auguste",
+      "affiliation": "UMMISCO, IRD / Sorbonne Université, France"
+    }
+  ],
+  "description": "<p>A fork of <a href=\"https://github.com/amkozlov/sativa\">SATIVA</a> (Kozlov et al. 2016) that replaces the RAxML placement engine with EPA-ng (Barbera et al. 2019) in both the leave-one-out and the final confirmation pass, while leaving SATIVA's classification and decision logic unchanged: EPA-ng edges are mapped back onto SATIVA's own branch numbering by leaf bipartition.</p><p>Measured against unmodified SATIVA v0.9.3 on ITS alignments, the leave-one-out drops from 257 s to 15.4 s at 1600 sequences and from 1536 s to 87 s at 5402, with 0.98 recall and 0.90 precision at 800 sequences.</p><p>The leave-one-out can also be driven one step at a time, so a workflow manager can build the reference, prepare the folds, place them across a cluster and score the result as separate jobs, with byte-identical output either way. A reference tree inferred elsewhere can be supplied instead of having SATIVA infer it.</p><p>Distributed through Bioconda as <code>sativa-epang</code>. Please cite the original SATIVA paper alongside this record.</p>",
+  "keywords": [
+    "taxonomy",
+    "phylogenetic placement",
+    "reference database curation",
+    "mislabel detection",
+    "16S rRNA",
+    "ITS",
+    "bioconda",
+    "nf-core"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "10.1093/nar/gkw396",
+      "relation": "isDerivedFrom",
+      "scheme": "doi",
+      "resource_type": "publication-article"
+    },
+    {
+      "identifier": "10.1093/sysbio/syy054",
+      "relation": "references",
+      "scheme": "doi",
+      "resource_type": "publication-article"
+    },
+    {
+      "identifier": "https://github.com/amkozlov/sativa",
+      "relation": "isDerivedFrom",
+      "scheme": "url"
+    },
+    {
+      "identifier": "https://anaconda.org/bioconda/sativa-epang",
+      "relation": "isIdenticalTo",
+      "scheme": "url"
+    }
+  ]
+}
