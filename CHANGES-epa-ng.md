@@ -70,11 +70,14 @@ ever reads it.
 Feeding a reference's own tree back through `-reftree` reproduces its `.mis` byte for byte,
 which is mode E of `tests/roundtrip.sh`.
 
-`-stage reference` writes `NAME.model` next to `NAME.refjson`. EPA-ng needs the model the
-tree was built under, and it otherwise lives in the temp directory the run deletes, so a
-reference reused later with `-r` would silently fall back to fitting GTR+G itself: slower,
-and not the model the tree was built under. Any run that builds a reference now writes that
-file, and any run given `-r` picks it back up.
+`-stage reference` writes the model next to `NAME.refjson`: `NAME.model` when it is a file,
+`NAME.modelstr` when `-refmodel` gave a model string. The two are kept apart because EPA-ng
+does not take them interchangeably — RAxML-NG's `.bestModel` ends with a partition clause
+that `-m` accepts from a file and rejects inline, and a `.bestModel` is a single short line,
+so what a sidecar holds cannot be told from its contents. EPA-ng needs the model the tree was built under, and it otherwise lives in the temp
+directory the run deletes, so a reference reused later with `-r` would silently fall back to
+fitting GTR+G itself. Any run that builds a reference writes the sidecar, and any run given
+`-r` picks it back up.
 
 `out/run.l1o_tasks/manifest.json` describes the whole job: the folds, which sequences are
 held out in each, the model, and the EPA-ng command to run in a fold directory. Step 3

@@ -665,25 +665,34 @@ def reference_model_path(refjson_fname):
     return os.path.splitext(refjson_fname)[0] + ".model"
 
 
+def reference_modelstr_path(refjson_fname):
+    """Where a model given as a string, rather than as a file, is kept."""
+    return os.path.splitext(refjson_fname)[0] + ".modelstr"
+
+
 def save_reference_model(config):
     """Keep the model the reference was built under, next to the refjson.
 
-    Three cases: -refmodel naming a file (RAxML-NG writes one), -refmodel naming a model
-    string, or the RAxML_info of our own reference step. A string is written into the same
-    sidecar as a single line, and read back as a string rather than a path.
+    A model file and a model string are kept under different names on purpose. EPA-ng takes
+    either, but not interchangeably: RAxML-NG's .bestModel ends with a partition clause
+    (", noname = 1-1602") that -m accepts from a file and rejects inline. Telling the two
+    apart by what they contain does not work, since a .bestModel is one short line as well,
+    so they are told apart by where they came from.
     """
-    dst = reference_model_path(config.refjson_fname)
     given = getattr(config, "user_refmodel", None)
     if given and os.path.isfile(given):
+        dst = reference_model_path(config.refjson_fname)
         shutil.copyfile(given, dst)
         return dst
     if given:
+        dst = reference_modelstr_path(config.refjson_fname)
         with open(dst, "w") as out:
             out.write(given.strip() + "\n")
         return dst
     info = glob.glob(os.path.join(config.raxml_outdir, "RAxML_info.mfresolv*"))
     if not info:
         return None
+    dst = reference_model_path(config.refjson_fname)
     shutil.copyfile(info[0], dst)
     return dst
 
@@ -691,19 +700,17 @@ def save_reference_model(config):
 def use_staged_model(*candidates):
     """First candidate that exists becomes EPA-ng's model, unless one was set by hand.
 
-    A sidecar holding a single short line is a model string, not a model file: EPA-ng takes
-    either, but only if it is handed the right one.
+    A `.modelstr` sidecar holds a model string and is passed inline; anything else is a
+    model file and is passed by path.
     """
     if os.environ.get("SATIVA_EPANG_MODEL"):
         return
     for cand in candidates:
         if not cand or not os.path.isfile(cand):
             continue
-        with open(cand) as handle:
-            head = handle.read(256)
-        lines = [l for l in head.splitlines() if l.strip()]
-        if len(lines) == 1 and len(head) < 200:
-            os.environ["SATIVA_EPANG_MODEL"] = lines[0].strip()
+        if cand.endswith(".modelstr"):
+            with open(cand) as handle:
+                os.environ["SATIVA_EPANG_MODEL"] = handle.read().strip()
         else:
             os.environ["SATIVA_EPANG_MODEL"] = os.path.abspath(cand)
         return
@@ -953,6 +960,7 @@ if __name__ == "__main__":
     t = LeaveOneTest(config)
     print_run_info(config)
 
+    saved_model = None
     if config.load_refjson:
         t.load_refjson(config.refjson_fname)
     else:
@@ -961,7 +969,8 @@ if __name__ == "__main__":
         t.run_epa_trainer()
         trainer_time = time.time() - tr_start_time
         t.load_refjson(config.refjson_fname)
-        save_reference_model(config)
+        # before clean_tempdir(): RAxML_info lives in the temp directory
+        saved_model = save_reference_model(config)
         if config.user_refmodel and not os.environ.get("SATIVA_EPANG_MODEL"):
             # -refmodel is the model of the supplied tree; it is what EPA-ng should place
             # under, in this run and in any later one started from this reference.
@@ -971,7 +980,8 @@ if __name__ == "__main__":
     if config.stage == "reference":
         config.clean_tempdir()
         config.log.info("\nReference written to: %s", os.path.abspath(config.refjson_fname))
-        config.log.info("Model written to:     %s", os.path.abspath(reference_model_path(config.refjson_fname)))
+        if saved_model:
+            config.log.info("Model written to:     %s", os.path.abspath(saved_model))
         config.log.info("Next:\n  %s -r %s -n %s -o %s -stage loo-tasks\n",
                         sys.argv[0], os.path.abspath(config.refjson_fname), config.name,
                         os.path.abspath(config.output_dir))
@@ -982,7 +992,8 @@ if __name__ == "__main__":
     # certain to be the one the folds were placed with.
     if config.load_refjson:
         use_staged_model(os.path.join(config.taskdir, "model") if config.stage == "loo-score" else None,
-                         reference_model_path(config.refjson_fname))
+                         reference_model_path(config.refjson_fname),
+                         reference_modelstr_path(config.refjson_fname))
 
     if config.stage == "loo-tasks":
         manifest = t.emit_loo_tasks(config.taskdir)
