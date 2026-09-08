@@ -366,7 +366,7 @@ class TreeNode(object):
             return self.up.remove_child(sister)
 
     def delete(self, prevent_nondicotomic=True, preserve_branch_length=False):
-        """
+        r"""
         Deletes node from the tree structure. Notice that this method
         makes 'disappear' the node from the tree structure. This means
         that children from the deleted node are transferred to the
@@ -1421,8 +1421,8 @@ class TreeNode(object):
         return '\n'+'\n'.join(lines)
 
     def ladderize(self, direction=0):
-        """ 
-        .. versionadded: 2.1 
+        r"""
+        .. versionadded: 2.1
 
         Sort the branches of a given tree (swapping children nodes)
         according to the size of each partition.

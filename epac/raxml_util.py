@@ -294,7 +294,7 @@ class RaxmlWrapper:
         
         m = None
         for pat in lh_patterns:
-            m = re.search('(?<=%s)[0-9.\-]+' % pat, info_str)
+            m = re.search(r'(?<=%s)[0-9.\-]+' % pat, info_str)
             if m:
                 lh = float(m.group(0))
                 return lh

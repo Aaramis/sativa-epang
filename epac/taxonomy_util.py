@@ -134,7 +134,7 @@ class TaxCode:
         return TaxCode.UNI_TAX_RANKS.get(uni_rank_level, ("Unknown", "?__"))
                             
     def guess_rank_level(self, ranks, rank_level):
-        rank_name = re.sub("[\W_]+", "", ranks[rank_level].lower())
+        rank_name = re.sub(r"[\W_]+", "", ranks[rank_level].lower())
         
         sorted_tax_levels = sorted(self.tax_code.keys())
         

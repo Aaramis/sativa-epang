@@ -46,13 +46,13 @@ import base64
 __all__ = ["read_newick", "write_newick", "print_supported_formats"]
 
 # Regular expressions used for reading newick format
-_ILEGAL_NEWICK_CHARS = ":;(),\[\]\t\n\r="
+_ILEGAL_NEWICK_CHARS = ":;(),\\[\\]\t\n\r="
 _NON_PRINTABLE_CHARS_RE = "[\x00-\x1f]+"
 
-_NHX_RE = "\[&&NHX:[^\]]*\]"
-_FLOAT_RE = "[+-]?\d+\.?\d*(?:[eE][-+]\d+)?"
+_NHX_RE = r"\[&&NHX:[^\]]*\]"
+_FLOAT_RE = r"[+-]?\d+\.?\d*(?:[eE][-+]\d+)?"
 #_FLOAT_RE = "[+-]?\d+\.?\d*"
-_NAME_RE = "[^():,;\[\]]+"
+_NAME_RE = r"[^():,;\[\]]+"
 
 DEFAULT_DIST = 1.0
 DEFAULT_NAME = ''
@@ -339,7 +339,7 @@ def _read_node_data(subnw, current_node, node_type, format):
     if flexible2:
         SECOND_MATCH += "?"
 
-    MATCH = '%s\s*%s\s*(%s)?' % (FIRST_MATCH, SECOND_MATCH, _NHX_RE)
+    MATCH = r'%s\s*%s\s*(%s)?' % (FIRST_MATCH, SECOND_MATCH, _NHX_RE)
     data = re.match(MATCH, subnw)
     if data:
         data = data.groups()
