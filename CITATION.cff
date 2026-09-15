@@ -12,8 +12,8 @@ authors:
     # orcid: "https://orcid.org/0000-0000-0000-0000"
 repository-code: "https://github.com/Aaramis/sativa-epang"
 url: "https://github.com/Aaramis/sativa-epang/blob/epa-ng/CHANGES-epa-ng.md"
-version: 0.9.3.4
-date-released: "2026-08-27"
+version: 0.10.0
+date-released: "2026-09-15"
 license: GPL-3.0-or-later
 keywords:
   - taxonomy
