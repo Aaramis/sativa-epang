@@ -3,6 +3,7 @@ SATIVA with EPA-ng
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22660415.svg)](https://doi.org/10.5281/zenodo.22660415)
 [![install with bioconda](https://img.shields.io/badge/install%20with-bioconda-brightgreen.svg)](https://anaconda.org/bioconda/sativa-epang)
+[![conda downloads](https://img.shields.io/conda/dn/bioconda/sativa-epang.svg)](https://anaconda.org/bioconda/sativa-epang)
 [![License](https://img.shields.io/badge/license-GPL3-blue.svg)](http://www.gnu.org/licenses/gpl-3.0.en.html)
 
 This is the `epa-ng` branch of a fork of [amkozlov/sativa](https://github.com/amkozlov/sativa).
