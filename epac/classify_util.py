@@ -67,8 +67,8 @@ class TaxTreeHelper:
                         outgr = child
                         outgr_size = child_size
         else:
-            raise AssertionError("Invalid tree: unifurcation at the root node. The taxonomy\n"
-                                 "has too little structure to root a reference tree on.")
+            raise AssertionError("Invalid tree: unifurcation at the root node. The taxonomy has "
+                                 "too little structure to root a reference tree on.")
         
         self.outgroup = outgr
     
