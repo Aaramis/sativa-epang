@@ -129,7 +129,7 @@ in `epac/version.py` carries the fork's version and is bumped on every release t
 | `SATIVA_L1O_ENGINE` | `epang` | `raxml` reverts both placement passes to RAxML. |
 | `SATIVA_EPANG_HEUR` | `on` | `off` passes `--no-heur` to EPA-ng, which then evaluates every branch, as RAxML does below 1000 taxa. |
 | `SATIVA_EPANG_BLO` | `sliding` | `raxml` passes `--raxml-blo`, RAxML style branch length optimisation. |
-| `SATIVA_EPANG_ACC_LWR` | 0.99999 | Accumulated likelihood weight kept. RAxML uses 0.999. |
+| `SATIVA_EPANG_ACC_LWR` | 0.99999 | Accumulated likelihood weight kept, EPA-ng's `--filter-acc-lwr`. RAxML uses 0.999. See below. |
 | `SATIVA_EPANG_FINAL_MODEL` | from `RAxML_info` | Model for the confirmation pass. |
 | `SATIVA_EPANG_BIN` | from `PATH` | EPA-ng binary. |
 | `SATIVA_EPANG_DEBUG` | unset | Logs the model EPA-ng reports and how much likelihood weight the edge remapping drops. |
@@ -144,6 +144,16 @@ in `epac/version.py` carries the fork's version and is bumped on every release t
 | `SATIVA_EPANG_DYN_HEUR` | EPA-ng default | `--dyn-heur`. |
 | `SATIVA_EPANG_FIX_HEUR` | unset | `--fix-heur`, the same kind of shortcut SATIVA asks RAxML for above 1000 taxa. |
 | `SATIVA_EPANG_PRECISION` | 10 | `--precision`, decimals in the jplace. |
+
+### Placement filtering
+
+EPA-ng keeps only the 7 best placements per query by default, which throws away most of
+the likelihood weight. On a 121-sequence GTDB set that left 57% of it on average, and as
+little as 14%. The score is a weighted vote over every candidate placement, so losing
+that much biases confidence downward and can hide a real mislabel.
+
+Every call therefore gets `--filter-acc-lwr 0.99999 --filter-max 100000`, which keeps
+essentially all of it. `SATIVA_EPANG_ACC_LWR` is the knob.
 
 Two further approximations of the leave-one-out are implemented, off, and not recommended.
 They agree with the exact leave-one-out on 0.54 and 0.73 of the calls respectively, which is
