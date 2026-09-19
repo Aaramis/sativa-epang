@@ -820,10 +820,10 @@ def check_args(args, parser):
     if args.stage == "loo-place":
         if not args.taskdir:
             print("ERROR: -stage loo-place needs -taskdir\n")
-            sys.exit()
+            sys.exit(1)
         if not os.path.isdir(args.taskdir):
             print("ERROR: task directory not found: %s" % args.taskdir)
-            sys.exit()
+            sys.exit(1)
         return
 
     # -reftree without -refmodel would place under GTR+G without saying so, and the run
@@ -833,11 +833,11 @@ def check_args(args, parser):
         print("ERROR: -reftree needs -refmodel, the model the tree was inferred under.\n"
               "       Pass the RAxML-NG model file, or -refmodel 'GTR+G' if that is really\n"
               "       what you want. Placing under a model nobody chose is not a default.\n")
-        sys.exit()
+        sys.exit(1)
     if args.user_refmodel and not args.user_reftree:
         print("ERROR: -refmodel only applies with -reftree.\n"
               "       Use SATIVA_EPANG_MODEL to set the model of a reference built here.\n")
-        sys.exit()
+        sys.exit(1)
 
     # loo-score must be given the reference the folds were built from: rebuilding it from
     # -s/-t gives a tree whose edges the placements do not refer to, and the mismatch shows

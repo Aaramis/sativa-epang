@@ -666,6 +666,14 @@ class RefTreeBuilder:
         self.cfg.log.info("===> Validating taxonomy and alignment ...\n")
         self.validate_taxonomy()
         self.cfg.log.info("====> Building a multifurcating tree from taxonomy with %d seqs ...\n" , self.taxonomy.seq_count())
+        # Below two sequences there is no tree to root, and save_rooting() fails much
+        # further down with "unifurcation at the root node", which says nothing about
+        # the input. Usually this is an alignment an upstream filter emptied.
+        if self.taxonomy.seq_count() < 2:
+            print("ERROR: %d sequences left after validating the taxonomy against the alignment.\n"
+                  "       A reference needs at least two. Check %s and %s.\n"
+                  % (self.taxonomy.seq_count(), self.cfg.align_fname, self.cfg.taxonomy_fname))
+            sys.exit(1)
         self.build_multif_tree()
         self.cfg.log.info("=====> Building the reference alignment ...\n")
         self.export_ref_alignment()
