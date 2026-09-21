@@ -54,6 +54,29 @@ sativa.py -r out/run.refjson -n run -o out -stage loo-score -taskdir out/run.l1o
 Steps 1 and 2 can still be done together: `-stage loo-tasks` without `-r` builds the
 reference first, as before.
 
+### Placing the folds in several jobs
+
+Step 3 places every fold in the task directory. `-folds` narrows it to some of them, so
+the placement can be spread over as many jobs as there are machines, each writing its own
+folds into the shared task directory and leaving the rest alone.
+
+```bash
+# every tenth fold, starting at the third. Needs no knowledge of how many there are,
+# which is what a workflow manager wants when it fans out.
+sativa.py -stage loo-place -taskdir out/run.l1o_tasks -T 8 -folds 3/10
+
+# or name them outright, to retry one that failed
+sativa.py -stage loo-place -taskdir out/run.l1o_tasks -T 8 -folds 0-9,15
+```
+
+The result does not depend on the split: placing the folds in ten jobs and placing them in
+one give the same `.mis`, byte for byte. Step 4 reads whatever jplace files it finds, so it
+only needs every fold to have been placed by someone. A job exits non-zero if any fold it
+was given failed, so a broken fold costs that job rather than the whole run.
+
+Fold size is set by `SATIVA_EPANG_FOLDS` (default 25), so a run of 250,000 sequences with
+the default already places 10,000 of them per fold.
+
 ### A reference tree inferred elsewhere
 
 `-reftree` takes the topology as given instead of running the constrained RAxML search, and

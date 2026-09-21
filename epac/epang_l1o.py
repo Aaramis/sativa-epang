@@ -839,7 +839,48 @@ def read_l1o_manifest(taskdir):
     return manifest
 
 
-def place_l1o_tasks(taskdir, threads=1, jobs=None, log=None):
+def parse_fold_selection(spec, ids):
+    """Fold ids named by `-folds`, as a sorted list. `ids` is what the manifest holds.
+
+    Two forms, because a workflow manager wants different things at different moments:
+    "0-9,15" names folds outright, and "3/10" takes every tenth fold starting at the
+    third, which needs no knowledge of how many there are.
+    """
+    known = sorted(ids)
+    spec = (spec or "").strip()
+    if not spec:
+        return known
+
+    shard = re.match(r"^(\d+)/(\d+)$", spec)
+    if shard:
+        part, total = int(shard.group(1)), int(shard.group(2))
+        if total < 1 or part >= total:
+            raise ValueError("-folds %s: shard must be i/n with 0 <= i < n" % spec)
+        return [i for i in known if i % total == part]
+
+    wanted = set()
+    for piece in spec.split(","):
+        piece = piece.strip()
+        if not piece:
+            continue
+        rng = re.match(r"^(\d+)-(\d+)$", piece)
+        if rng:
+            lo, hi = int(rng.group(1)), int(rng.group(2))
+            if hi < lo:
+                raise ValueError("-folds %s: range %s runs backwards" % (spec, piece))
+            wanted.update(range(lo, hi + 1))
+        elif piece.isdigit():
+            wanted.add(int(piece))
+        else:
+            raise ValueError("-folds %s: cannot read %r" % (spec, piece))
+
+    missing = sorted(wanted - set(known))
+    if missing:
+        raise ValueError("-folds %s: no such fold: %s" % (spec, ", ".join(map(str, missing))))
+    return sorted(wanted)
+
+
+def place_l1o_tasks(taskdir, threads=1, jobs=None, log=None, folds=None):
     """Step 2. Run EPA-ng once per fold directory, and return how many were placed.
 
     Convenience: this is the step a workflow manager takes over, by running
@@ -853,6 +894,9 @@ def place_l1o_tasks(taskdir, threads=1, jobs=None, log=None):
     manifest = read_l1o_manifest(taskdir)
     model = manifest["model"]
     records = manifest["folds"]
+    if folds is not None:
+        keep = set(folds)
+        records = [r for r in records if r["id"] in keep]
 
     # Folds are independent: each has its own tree, its own alignment and its own EPA-ng.
     # SATIVA_EPANG_FOLD_JOBS runs that many at once and splits the thread budget between

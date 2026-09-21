@@ -801,6 +801,10 @@ Run name of the previous (terminated) job must be specified via -n option.""")
     parser.add_argument("-taskdir", dest="taskdir", default=None,
             help="""Directory holding the leave-one-out folds, for -stage
             (default: OUTPUT_DIR/NAME.l1o_tasks).""")
+    parser.add_argument("-folds", dest="folds", default=None,
+            help="""Which folds -stage loo-place should place, so that several runs can
+            share one task directory. "0-9,15" names them; "3/10" takes every tenth fold
+            starting at the third, which needs no count. Default: all of them.""")
 
     args = parser.parse_args()
     if getattr(args, "show_version", False):
@@ -947,10 +951,15 @@ if __name__ == "__main__":
     # no taxonomy and no config. Running manifest["command"] in each fold directory with
     # your own scheduler does the same thing.
     if args.stage == "loo-place":
-        from epac.epang_l1o import place_l1o_tasks, read_l1o_manifest
-        wanted = len(read_l1o_manifest(args.taskdir)["folds"])
-        placed = place_l1o_tasks(args.taskdir, threads=args.num_threads)
-        sys.exit(0 if placed == wanted else 1)
+        from epac.epang_l1o import place_l1o_tasks, read_l1o_manifest, parse_fold_selection
+        all_ids = [record["id"] for record in read_l1o_manifest(args.taskdir)["folds"]]
+        try:
+            selected = parse_fold_selection(args.folds, all_ids)
+        except ValueError as err:
+            print("ERROR: %s\n" % err)
+            sys.exit(1)
+        placed = place_l1o_tasks(args.taskdir, threads=args.num_threads, folds=selected)
+        sys.exit(0 if placed == len(selected) else 1)
 
     config = SativaConfig(args)
 
