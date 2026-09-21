@@ -9,11 +9,11 @@ authors:
     family-names: Gardette
     email: auguste.gardette@ird.fr
     affiliation: "UMMISCO, IRD / Sorbonne Université, France"
-    # orcid: "https://orcid.org/0000-0000-0000-0000"
+    orcid: "https://orcid.org/0009-0009-7635-8344"
 repository-code: "https://github.com/Aaramis/sativa-epang"
 url: "https://github.com/Aaramis/sativa-epang/blob/epa-ng/CHANGES-epa-ng.md"
-version: 0.10.0
-date-released: "2026-09-15"
+version: 0.10.1
+date-released: "2026-09-21"
 license: GPL-3.0-or-later
 keywords:
   - taxonomy
