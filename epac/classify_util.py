@@ -181,12 +181,13 @@ class TaxClassifyHelper:
         edges = self.erlang_filter(edges)
         if len(edges) > 0:
             if self.cfg.taxassign_method == "1":
-                ranks, lws = self.assign_taxonomy_maxsum(edges, minlw)
+                ranks, lws, rw_total = self.assign_taxonomy_maxsum(edges, minlw)
             else:
                 ranks, lws = self.assign_taxonomy_maxlh(edges)
-            return ranks, lws
+                rw_total = {}
+            return ranks, lws, rw_total
         else:
-            return [], []      
+            return [], [], {}      
             
     def erlang_filter(self, edges):
         if self.cfg.brlen_pv == 0.:
@@ -337,7 +338,7 @@ class TaxClassifyHelper:
             
         # if all branches have empty ranks only, just return this placement
         if len(rw_total) == 0:
-            return ranks, [1.] * len(ranks)
+            return ranks, [1.] * len(ranks), rw_total
         
         # we assign the sequence to a rank, which has the max "own" weight AND 
         # whose "total" weight is greater than a confidence threshold
@@ -360,5 +361,5 @@ class TaxClassifyHelper:
                 rank_id = Taxonomy.get_rank_uid(a_ranks, i)
                 a_conf[i] = rw_total[rank_id]
 
-        return a_ranks, a_conf
+        return a_ranks, a_conf, rw_total
     
