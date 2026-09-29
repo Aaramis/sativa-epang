@@ -86,7 +86,7 @@ class TaxClassifyHelperTests(unittest.TestCase):
         for p in parser.get_placement():
             sid = p["n"][0]
             edges = p["p"]
-            ranks, conf = self.classify_helper.classify_seq(edges)
+            ranks, conf, _ = self.classify_helper.classify_seq(edges)
 #            for e in edges: print self.bid_tax_map[str(e[0])], e[2]
 #            print sid, "\t", ";".join(ranks) #, conf
             self.assertEqual(ranks, expected_assign_map[sid])

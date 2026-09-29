@@ -130,7 +130,7 @@ class LeaveOneTest:
         else:
             print("ERROR: no placements! something is definitely wrong!")
 
-    def check_seq_tax_labels(self, seq_name, orig_ranks, ranks, lws):
+    def check_seq_tax_labels(self, seq_name, orig_ranks, ranks, lws, rw_total=None):
         mis_rec = None
         
         num_common_ranks = len(self.tax_common_ranks)
@@ -149,6 +149,7 @@ class LeaveOneTest:
             mis_rec['ranks'] = []
             mis_rec['lws'] = [1.0]
             mis_rec['conf'] = mis_rec['lws'][0]
+            mis_rec['excl'] = 1.
         else:
             mislabel_lvl = -1
             min_len = min(len(orig_ranks),len(ranks))
@@ -169,6 +170,13 @@ class LeaveOneTest:
                 mis_rec['ranks'] = ranks
                 mis_rec['lws'] = lws
                 mis_rec['conf'] = lws[mislabel_lvl]
+                # 'conf' describes the proposed replacement. This is the evidence
+                # against the declared label, which is what the mislabel call rests
+                # on, and the two can differ a lot: a placement sitting entirely on
+                # a taxon's stem reports 0.51 whether or not any weight at all falls
+                # inside the declared taxon (see parent_lhw_coeff).
+                declared_uid = Taxonomy.get_rank_uid(orig_ranks, mislabel_lvl)
+                mis_rec['excl'] = 1. - (rw_total or {}).get(declared_uid, 0.)
     
         if mis_rec:
             self.mislabels.append(mis_rec)
@@ -236,6 +244,8 @@ class LeaveOneTest:
         output += Taxonomy.lineage_str(uncorr_orig_ranks) + "\t"
         output += Taxonomy.lineage_str(uncorr_ranks) + "\t"
         output += ";".join(["%.3f" % conf for conf in mis_rec['lws']])
+        if 'excl' in mis_rec:   # absent from the rank records, which have no declared label
+            output += "\t%.3f" % mis_rec['excl']
         if 'rank_conf' in mis_rec:
             output += "\t%.3f" % mis_rec['rank_conf']
         return output
@@ -315,7 +325,7 @@ class LeaveOneTest:
         
         with open(out_fname, "w") as fo_all:
             fields = ["SeqID", "MislabeledLevel", "OriginalLabel", "ProposedLabel", "Confidence", "OriginalTaxonomyPath", 
-                      "ProposedTaxonomyPath", "PerRankConfidence"]
+                      "ProposedTaxonomyPath", "PerRankConfidence", "OriginalLabelExclusion"]
             if self.cfg.ranktest:
                 fields += ["HigherRankMisplacedConfidence"]
             self.write_mislabels_header(fo_all, final, fields)
@@ -382,7 +392,7 @@ class LeaveOneTest:
         for jp in jp_list:
             placements = jp.get_placement()
             for place in placements:
-                ranks, lws = self.classify_seq(place)
+                ranks, lws, _ = self.classify_seq(place)
                 tax_path = subtree_list[subtree_count][0]
                 orig_ranks = Taxonomy.split_rank_uid(tax_path)
                 rank_level = Taxonomy.lowest_assigned_rank_level(orig_ranks)
@@ -455,11 +465,11 @@ class LeaveOneTest:
             orig_ranks =  self.taxtree_helper.get_seq_ranks_from_tree(seq_name)
 
             # get EPA tax label
-            ranks, lws = self.classify_seq(place)
+            ranks, lws, rw_total = self.classify_seq(place)
             l1out_ass[seq_name] = (ranks, lws)
             
             # check if they match
-            mis_rec = self.check_seq_tax_labels(seq_name, orig_ranks, ranks, lws)
+            mis_rec = self.check_seq_tax_labels(seq_name, orig_ranks, ranks, lws, rw_total)
             # cross-check with higher rank mislabels
             if self.cfg.ranktest and mis_rec:
                 rank_conf = 0
@@ -557,13 +567,13 @@ class LeaveOneTest:
 #            print orig_ranks
 
             # get EPA tax label
-            ranks, lws = cl.classify_seq(place["p"])
+            ranks, lws, rw_total = cl.classify_seq(place["p"])
             final_ass[seq_name] = (ranks, lws)
 
             #print seq_name, ": ", orig_ranks, "--->", ranks
 
             # check if they match
-            mis_rec = self.check_seq_tax_labels(seq_name, orig_ranks, ranks, lws)
+            mis_rec = self.check_seq_tax_labels(seq_name, orig_ranks, ranks, lws, rw_total)
 
         self.write_assignments(final_ass, final=True)
 

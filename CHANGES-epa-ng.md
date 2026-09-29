@@ -19,9 +19,10 @@ whole difference is:
 |---|---|
 | `sativa.py` | `run_leave_seq_out_test()` places with EPA-ng in K folds instead of RAxML `-f O`. `run_epa_once()` runs the final confirmation on EPA-ng instead of RAxML `-f v`. Both fall back to RAxML with `SATIVA_L1O_ENGINE=raxml`. `-stage` and `-taskdir` run the leave-one-out one step at a time (below). Temporary files go to the output directory when the install directory is read only. |
 | `epac/epang_l1o.py` | New. `run_epang_l1o()` (pass 1) and `run_epang_final()` (pass 2), plus the mapping from EPA-ng edge numbers back to SATIVA's `B=` numbering, and the three staged steps `run_epang_l1o()` is built from. |
+| `epac/classify_util.py` | `classify_seq()` and `assign_taxonomy_maxsum()` also return the likelihood weight each taxon received, which the `OriginalLabelExclusion` column below reports. The classification itself is unchanged. |
 | `epac/config.py` | `shutil.rmtree(..., ignore_errors=True)` when cleaning the temp directory, which otherwise races on a parallel filesystem. Carries `-stage` and `-taskdir`. |
 
-`epac/classify_util.py` and `epac/msa.py` are byte identical to upstream.
+`epac/msa.py` is byte identical to upstream.
 `epac/taxonomy_util.py` and `epac/raxml_util.py` differ by one line each, a regex marked raw
 so python 3.12 stops warning about an invalid escape; the strings themselves are unchanged.
 `epac/json_util.py` lets `set_binary_model()` accept a missing file, since the RAxML binary
@@ -29,6 +30,22 @@ model it reads is not produced when EPA-ng does the placement.
 
 What matters is untouched: the decision rule, the branch labelling, the confidence
 computation and the reference tree step are upstream's.
+
+### The OriginalLabelExclusion column
+
+`*.mis` carries one more column after `PerRankConfidence`: the likelihood weight that fell
+outside the declared taxon at the mislabelled rank, between 0 and 1.
+
+`Confidence` scores the taxon SATIVA proposes instead. That is a different question from how
+much the data argues against the label on the sequence, and the two come apart at the value
+that matters most. A query whose weight sits entirely on a taxon's stem is credited
+`parent_lhw_coeff` = 0.51 to the parent and 0.49 to the taxon itself, so it reports 0.51
+whether or not any weight at all falls inside the declared taxon. Verdicts pile up on that
+number, and the confidence alone cannot separate them.
+
+The column does separate them, so a caller can threshold on the evidence against the label
+rather than on the confidence in its replacement. Nothing else changes: the same sequences
+are flagged, with the same proposed taxonomy and the same confidences.
 
 ## Running the leave-one-out in steps
 

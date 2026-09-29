@@ -271,7 +271,7 @@ class EpaClassifier:
             origin_taxon_name = EpacConfig.strip_query_prefix(taxon_name)
             edges = place["p"]
 
-            ranks, lws = self.classify_helper.classify_seq(edges)
+            ranks, lws, _ = self.classify_helper.classify_seq(edges)
             rankout = self.print_ranks(ranks, lws, self.cfg.min_lhw)
 
             if rankout == None:
