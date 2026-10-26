@@ -961,15 +961,16 @@ if __name__ == "__main__":
     # no taxonomy and no config. Running manifest["command"] in each fold directory with
     # your own scheduler does the same thing.
     if args.stage == "loo-place":
-        from epac.epang_l1o import place_l1o_tasks, read_l1o_manifest, parse_fold_selection
+        from epac.epang_l1o import place_l1o_tasks, read_l1o_manifest, parse_fold_selection, l1o_exit_code
         all_ids = [record["id"] for record in read_l1o_manifest(args.taskdir)["folds"]]
         try:
             selected = parse_fold_selection(args.folds, all_ids)
         except ValueError as err:
             print("ERROR: %s\n" % err)
             sys.exit(1)
-        placed = place_l1o_tasks(args.taskdir, threads=args.num_threads, folds=selected)
-        sys.exit(0 if placed == len(selected) else 1)
+        failures = []
+        placed = place_l1o_tasks(args.taskdir, threads=args.num_threads, folds=selected, failures=failures)
+        sys.exit(l1o_exit_code(placed, len(selected), failures))
 
     config = SativaConfig(args)
 

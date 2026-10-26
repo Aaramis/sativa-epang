@@ -10,7 +10,7 @@ alignment and the fold's sequences are placed with EPA-ng; the EPA-ng edges are
 remapped to B= by leaf bipartition. All placements are kept
 (--filter-acc-lwr 0.99999 --filter-max 100000) to recover the full LWR mass.
 """
-import os, sys, re, json, glob, random, subprocess, shutil, time
+import os, sys, re, json, glob, random, signal, subprocess, shutil, time
 sys.setrecursionlimit(200000)
 from .ete2 import Tree
 
@@ -880,8 +880,18 @@ def parse_fold_selection(spec, ids):
     return sorted(wanted)
 
 
-def place_l1o_tasks(taskdir, threads=1, jobs=None, log=None, folds=None):
+def l1o_exit_code(placed, wanted, failures):
+    """Exit status of -stage loo-place: 137 when EPA-ng was killed by SIGKILL, which is how an
+    out-of-memory kill looks, so that a workflow manager can retry with more memory."""
+    if placed == wanted:
+        return 0
+    return 137 if any(rc == -signal.SIGKILL for _, rc in failures) else 1
+
+
+def place_l1o_tasks(taskdir, threads=1, jobs=None, log=None, folds=None, failures=None):
     """Step 2. Run EPA-ng once per fold directory, and return how many were placed.
+
+    A failed fold is appended to `failures`, if given, as (fold id, EPA-ng return code).
 
     Convenience: this is the step a workflow manager takes over, by running
     manifest["command"] in each fold directory itself.
@@ -925,7 +935,10 @@ def place_l1o_tasks(taskdir, threads=1, jobs=None, log=None, folds=None):
             handle.write(proc.stdout or "")
             handle.write(proc.stderr or "")
         if proc.returncode != 0 or not os.path.isfile(os.path.join(wd, "epa_result.jplace")):
-            _log("EPA-ng FAIL fold %d: %s" % (record["id"], (proc.stderr or "")[-300:]))
+            _log("EPA-ng FAIL fold %d (exit %d): %s"
+                 % (record["id"], proc.returncode, (proc.stderr or "")[-300:]))
+            if failures is not None:
+                failures.append((record["id"], proc.returncode))
             return 0
         if os.environ.get("SATIVA_EPANG_DEBUG"):
             # What EPA-ng makes of the model file it was handed. Above 500 taxa SATIVA
